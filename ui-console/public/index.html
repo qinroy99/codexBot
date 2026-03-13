@@ -1,0 +1,242 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>远程桥接控制台</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <h1>远程桥接</h1>
+        <p>通过 Telegram、飞书、Discord、QQ 等外部渠道控制 Claude / Codex</p>
+      </div>
+      <nav class="nav">
+        <button class="nav-item is-active" data-panel="overview">远程桥接</button>
+        <button class="nav-item" data-panel="telegram">Telegram 设置</button>
+        <button class="nav-item" data-panel="feishu">飞书设置</button>
+        <button class="nav-item" data-panel="discord">Discord 设置</button>
+        <button class="nav-item" data-panel="qq">QQ 设置</button>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <section class="panel is-active" id="panel-overview">
+        <div class="page-header">
+          <div>
+            <h2>远程桥接</h2>
+            <p>总览 bridge 状态、日志、消息、审计与诊断修复。</p>
+          </div>
+          <div class="status-pill" id="status-pill">加载中</div>
+        </div>
+
+        <div class="card hero-card">
+          <div class="hero-top">
+            <div>
+              <h3>桥接状态</h3>
+              <p id="hero-summary">正在读取 bridge 状态...</p>
+            </div>
+            <div class="actions wrap">
+              <button class="btn btn-ghost" id="refresh-status">刷新</button>
+              <button class="btn btn-ghost" id="stop-bridge">停止</button>
+              <button class="btn btn-ghost" id="restart-bridge">重启</button>
+              <button class="btn btn-primary" id="start-bridge">启动</button>
+            </div>
+          </div>
+          <div class="hero-meta" id="hero-meta"></div>
+          <div class="card-actions top-gap wrap-row">
+            <button class="btn btn-ghost" id="repair-pid">修复 stale PID</button>
+            <button class="btn btn-primary" id="run-auto-repair">一键诊断修复</button>
+            <button class="btn btn-ghost" id="enable-notifications">启用告警通知</button>
+            <label class="mini-toggle">
+              <input type="checkbox" id="auto-refresh-logs" checked>
+              <span>日志自动刷新</span>
+            </label>
+            <div class="stream-pill" id="log-stream-status">日志流未连接</div>
+          </div>
+          <div class="inline-feedback" id="overview-feedback"></div>
+        </div>
+
+        <div class="grid two">
+          <div class="card">
+            <div class="card-head"><div><h3>运行告警</h3><p>根据 bridge 状态、错误与 doctor 结果生成。</p></div></div>
+            <div id="alert-list" class="stack"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div><h3>诊断建议模板</h3><p>结合当前状态给出优先处理建议。</p></div></div>
+            <div id="suggestion-list" class="stack"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div><h3>告警阈值设置</h3><p>调整 doctor 缺失项、会话静默时长和桌面通知级别。</p></div><button class="btn btn-ghost" id="save-thresholds">保存阈值</button></div>
+          <div class="toolbar-row thresholds-row">
+            <label><span>doctor MISS 阈值</span><input id="threshold-doctor-miss" type="number" min="0" max="99"></label>
+            <label><span>会话静默阈值 (分钟)</span><input id="threshold-stale-minutes" type="number" min="1" max="1440"></label>
+            <label><span>通知级别</span><select id="threshold-notify-level" class="select-box"><option value="critical">仅 critical</option><option value="error">error 及以上</option><option value="warn">warn 及以上</option><option value="info">全部</option></select></label>
+          </div>
+          <div class="inline-feedback" id="threshold-feedback"></div>
+        </div>
+
+        <div class="grid two">
+          <div class="card">
+            <div class="card-head"><div><h3>渠道</h3><p>启用或禁用桥接渠道与自动启动</p></div></div>
+            <div class="toggle-list">
+              <label class="toggle-row"><span><strong>Telegram</strong><small>通过 Telegram Bot 接收和回复消息</small></span><input type="checkbox" id="channel-telegram"></label>
+              <label class="toggle-row"><span><strong>飞书</strong><small>通过飞书机器人接收和回复消息</small></span><input type="checkbox" id="channel-feishu"></label>
+              <label class="toggle-row"><span><strong>Discord</strong><small>通过 Discord Bot 接收和回复消息</small></span><input type="checkbox" id="channel-discord"></label>
+              <label class="toggle-row"><span><strong>QQ</strong><small>通过 QQ 机器人接收和回复私聊消息</small></span><input type="checkbox" id="channel-qq"></label>
+              <label class="toggle-row"><span><strong>自动启动桥接</strong><small>应用启动时自动拉起 bridge</small></span><input type="checkbox" id="auto-start"></label>
+            </div>
+            <div class="card-actions"><button class="btn btn-primary" id="save-overview">保存渠道配置</button></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div><h3>适配器状态</h3><p>各渠道适配器的实时状态</p></div></div>
+            <div id="adapter-status" class="stack"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div><h3>最近日志</h3><p>支持 SSE 实时日志流，断开后回退到手动刷新</p></div><button class="btn btn-ghost" id="refresh-logs">刷新日志</button></div>
+          <pre class="log-box" id="log-box">加载中...</pre>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h3>对话中心</h3>
+              <p>按当前 PID 查看会话，支持关键词与活跃状态过滤，点开弹窗查看完整消息并自动刷新。</p>
+            </div>
+            <div class="actions wrap">
+              <select id="conversation-pid" class="select-box"></select>
+              <button class="btn btn-ghost" id="refresh-conversations">刷新会话</button>
+            </div>
+          </div>
+          <div class="toolbar-row">
+            <label><span>搜索关键词</span><input id="conversation-search" type="text" placeholder="chatId / sessionId / 文本片段"></label>
+            <label><span>活跃状态</span><select id="conversation-active-filter" class="select-box"><option value="all">全部</option><option value="active">仅活跃</option><option value="inactive">仅停用</option></select></label>
+          </div>
+          <div id="conversation-list" class="stack"></div>
+        </div>
+
+        <div class="grid two">
+          <div class="card">
+            <div class="card-head"><div><h3>会话绑定管理</h3><p>查看 chatId 与工作会话的绑定关系，可停用或恢复。</p></div><button class="btn btn-ghost" id="refresh-bindings">刷新</button></div>
+            <div id="bindings-list" class="stack"></div>
+            <div class="inline-feedback" id="bindings-feedback"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div><h3>最近审计</h3><p>查看最近收发记录，支持过滤和导出。</p></div><div class="actions wrap"><button class="btn btn-ghost" id="export-audit-json">导出 JSON</button><button class="btn btn-ghost" id="export-audit-csv">导出 CSV</button><button class="btn btn-ghost" id="refresh-audit">刷新</button></div></div>
+            <div class="toolbar-row">
+              <label><span>关键词</span><input id="audit-search" type="text" placeholder="summary / chatId / sessionId"></label>
+              <label><span>方向</span><select id="audit-direction-filter" class="select-box"><option value="all">全部</option><option value="inbound">入站</option><option value="outbound">出站</option></select></label>
+              <label><span>渠道</span><select id="audit-channel-filter" class="select-box"><option value="all">全部</option><option value="qq">QQ</option><option value="telegram">Telegram</option><option value="feishu">飞书</option><option value="discord">Discord</option></select></label>
+            </div>
+            <div id="audit-list" class="stack"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div><h3>诊断结果</h3><p>读取 doctor 输出，帮助定位环境、配置和 bridge 状态问题。</p></div><button class="btn btn-ghost" id="refresh-doctor">刷新诊断</button></div>
+          <div class="doctor-summary" id="doctor-summary"></div>
+          <pre class="doctor-box" id="doctor-box">尚未加载诊断结果</pre>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-telegram">
+        <div class="page-header"><div><h2>Telegram 设置</h2><p>配置 Telegram Bot 与允许用户。</p></div></div>
+        <div class="card">
+          <div class="form-grid">
+            <label><span>Bot Token</span><input id="tg-bot-token" type="password" placeholder="输入新的 Telegram Bot Token"><small id="tg-token-hint"></small></label>
+            <label><span>Chat ID</span><input id="tg-chat-id" type="text" placeholder="可选，指定默认聊天"></label>
+          </div>
+          <label><span>Allowed User IDs</span><input id="tg-allowed-users" type="text" placeholder="123, 456"></label>
+          <div class="card-actions"><button class="btn btn-primary" id="save-telegram">保存 Telegram 设置</button><button class="btn btn-ghost" id="test-telegram">测试连接</button></div>
+          <div class="inline-feedback" id="telegram-feedback"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-feishu">
+        <div class="page-header"><div><h2>飞书设置</h2><p>配置飞书 App 凭据与允许用户。</p></div></div>
+        <div class="card">
+          <div class="form-grid">
+            <label><span>App ID</span><input id="feishu-app-id" type="text"></label>
+            <label><span>App Secret</span><input id="feishu-app-secret" type="password" placeholder="输入新的 App Secret"><small id="feishu-secret-hint"></small></label>
+          </div>
+          <div class="form-grid">
+            <label><span>Domain</span><input id="feishu-domain" type="text" placeholder="https://open.feishu.cn"></label>
+            <label><span>Allowed Users</span><input id="feishu-allowed-users" type="text" placeholder="ou_xxx, ou_yyy"></label>
+          </div>
+          <div class="card-actions"><button class="btn btn-primary" id="save-feishu">保存飞书设置</button><button class="btn btn-ghost" id="test-feishu">测试连接</button></div>
+          <div class="inline-feedback" id="feishu-feedback"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-discord">
+        <div class="page-header"><div><h2>Discord 设置</h2><p>配置 Discord Bot 与访问范围。</p></div></div>
+        <div class="card">
+          <div class="form-grid">
+            <label><span>Bot Token</span><input id="discord-bot-token" type="password" placeholder="输入新的 Discord Bot Token"><small id="discord-token-hint"></small></label>
+            <label><span>Allowed Users</span><input id="discord-allowed-users" type="text" placeholder="user_id_1, user_id_2"></label>
+          </div>
+          <div class="form-grid">
+            <label><span>Allowed Channels</span><input id="discord-allowed-channels" type="text" placeholder="channel_id_1, channel_id_2"></label>
+            <label><span>Allowed Guilds</span><input id="discord-allowed-guilds" type="text" placeholder="guild_id_1, guild_id_2"></label>
+          </div>
+          <div class="card-actions"><button class="btn btn-primary" id="save-discord">保存 Discord 设置</button><button class="btn btn-ghost" id="test-discord">测试连接</button></div>
+          <div class="inline-feedback" id="discord-feedback"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-qq">
+        <div class="page-header"><div><h2>QQ 设置</h2><p>配置 QQ 机器人凭据、允许用户和图片设置。</p></div></div>
+        <div class="card">
+          <div class="card-head"><div><h3>机器人凭据</h3><p>输入您的 QQ 机器人 App ID 和 App Secret</p></div></div>
+          <div class="form-grid">
+            <label><span>App ID</span><input id="qq-app-id" type="text" placeholder="1903xxxxxx"></label>
+            <label><span>App Secret</span><input id="qq-app-secret" type="password" placeholder="输入新的 App Secret，留空则保持不变"><small id="qq-secret-hint"></small></label>
+          </div>
+          <div class="card-actions"><button class="btn btn-primary" id="save-qq-credentials">保存</button><button class="btn btn-ghost" id="test-qq-connection">测试连接</button></div>
+          <div class="inline-feedback" id="qq-test-result"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><h3>允许的用户</h3><p>允许使用桥接的 user_openid，逗号分隔</p></div></div>
+          <label><span>Allowed User OpenIDs</span><input id="qq-allowed-users" type="text" placeholder="user_openid_1, user_openid_2"></label>
+          <div class="card-actions"><button class="btn btn-primary" id="save-qq-users">保存</button></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><h3>图片设置</h3><p>控制机器人如何处理 QQ 中的图片</p></div></div>
+          <div class="form-grid">
+            <label class="toggle-card"><span><strong>启用图片输入</strong><small>允许接收和处理来自 QQ 的图片</small></span><input id="qq-image-enabled" type="checkbox"></label>
+            <label><span>最大图片大小 (MB)</span><input id="qq-max-image-size" type="number" min="1" max="50"></label>
+          </div>
+          <div class="card-actions"><button class="btn btn-primary" id="save-qq-images">保存</button></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop hidden" id="conversation-modal">
+    <div class="modal-panel">
+      <div class="modal-head">
+        <div>
+          <h3 id="conversation-modal-title">对话详情</h3>
+          <p id="conversation-modal-meta">加载中...</p>
+        </div>
+        <div class="actions wrap">
+          <label><span>关键词</span><input id="message-search" type="text" placeholder="搜索消息内容"></label>
+          <label><span>角色</span><select id="message-role-filter" class="select-box"><option value="all">全部</option><option value="user">用户</option><option value="assistant">助手</option><option value="system">系统</option></select></label>
+          <label class="mini-toggle"><input type="checkbox" id="auto-refresh-conversation" checked><span>自动刷新</span></label>
+          <button class="btn btn-ghost" id="refresh-conversation-detail">刷新</button>
+          <button class="btn btn-ghost" id="close-conversation-modal">关闭</button>
+        </div>
+      </div>
+      <div class="message-list" id="conversation-message-list"></div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

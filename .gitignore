@@ -1,0 +1,9 @@
+node_modules/
+ui-console/node_modules/
+ui-console/build/
+ui-console/dist/
+ui-console/*.log
+*.zip
+*.7z
+.DS_Store
+Thumbs.db
