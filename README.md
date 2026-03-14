@@ -1,5 +1,7 @@
 ﻿# codexBot
 
+codexBot is a safe local bot bridge and management tool for IM + Codex workflows.
+
 一个面向 `Claude-to-IM` / `Codex` 的桥接与监控项目，当前以 `QQ 私聊桥接 + Web 控制台` 为核心。
 
 ## 包含内容
