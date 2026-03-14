@@ -1,0 +1,77 @@
+﻿<svg width="1600" height="980" viewBox="0 0 1600 980" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="980" fill="#efe8db"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1600" y2="980" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f7f4ee"/>
+      <stop offset="1" stop-color="#e9decd"/>
+    </linearGradient>
+    <linearGradient id="hero" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#dde8ff"/>
+      <stop offset="1" stop-color="#fff8ef"/>
+    </linearGradient>
+    <filter id="shadow" x="0" y="0" width="2000" height="1400" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="24" stdDeviation="30" flood-color="#3c2c18" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="980" fill="url(#bg)"/>
+  <rect x="28" y="28" width="1544" height="924" rx="28" fill="#fffaf3" filter="url(#shadow)"/>
+  <rect x="28" y="28" width="292" height="924" rx="28" fill="#f8f3ea"/>
+  <text x="64" y="98" fill="#241c13" font-size="44" font-family="Segoe UI, Arial">codexBot</text>
+  <text x="64" y="138" fill="#766a5f" font-size="24" font-family="Segoe UI, Arial">QQ bridge and Codex monitor console</text>
+  <rect x="48" y="210" width="252" height="64" rx="16" fill="#dfe9ff" stroke="#8eb0ff"/>
+  <text x="88" y="251" fill="#241c13" font-size="28" font-family="Segoe UI, Arial">远程桥接</text>
+  <g fill="#766a5f" font-size="28" font-family="Segoe UI, Arial">
+    <text x="88" y="330">Telegram 设置</text>
+    <text x="88" y="392">飞书设置</text>
+    <text x="88" y="454">Discord 设置</text>
+    <text x="88" y="516">QQ 设置</text>
+  </g>
+  <rect x="356" y="64" width="1168" height="170" rx="26" fill="url(#hero)" stroke="#cad8f6"/>
+  <text x="392" y="124" fill="#241c13" font-size="34" font-family="Segoe UI, Arial">桥接当前在线</text>
+  <text x="392" y="164" fill="#766a5f" font-size="22" font-family="Segoe UI, Arial">已启用 1 个渠道，QQ adapter 已连接，可直接查看日志、审计和对话详情。</text>
+  <rect x="1302" y="96" width="160" height="48" rx="24" fill="#dff5e8"/>
+  <text x="1342" y="128" fill="#1f8f55" font-size="24" font-family="Segoe UI, Arial">已连接</text>
+  <g>
+    <rect x="392" y="188" width="150" height="28" rx="14" fill="#f2ede5"/>
+    <text x="420" y="208" fill="#766a5f" font-size="18" font-family="Segoe UI, Arial">PID 10964</text>
+    <rect x="560" y="188" width="320" height="28" rx="14" fill="#f2ede5"/>
+    <text x="588" y="208" fill="#766a5f" font-size="18" font-family="Segoe UI, Arial">runId 9d0b29a8-98b1-488f...</text>
+    <rect x="900" y="188" width="240" height="28" rx="14" fill="#f2ede5"/>
+    <text x="928" y="208" fill="#766a5f" font-size="18" font-family="Segoe UI, Arial">绑定数量 1</text>
+  </g>
+  <rect x="356" y="266" width="560" height="226" rx="24" fill="#fffdf9" stroke="#e0d6c9"/>
+  <text x="392" y="318" fill="#241c13" font-size="30" font-family="Segoe UI, Arial">运行告警</text>
+  <rect x="392" y="346" width="488" height="60" rx="18" fill="#fff0d9"/>
+  <text x="420" y="383" fill="#af6d1a" font-size="22" font-family="Segoe UI, Arial">会话长时间无新消息，建议查看消息详情弹窗。</text>
+  <rect x="392" y="420" width="488" height="48" rx="18" fill="#eef4ff"/>
+  <text x="420" y="451" fill="#2368f5" font-size="20" font-family="Segoe UI, Arial">支持浏览器通知、阈值设置和一键诊断修复</text>
+  <rect x="964" y="266" width="560" height="226" rx="24" fill="#fffdf9" stroke="#e0d6c9"/>
+  <text x="1000" y="318" fill="#241c13" font-size="30" font-family="Segoe UI, Arial">诊断建议模板</text>
+  <g fill="#241c13" font-size="22" font-family="Segoe UI, Arial">
+    <text x="1000" y="370">1. 检查 QQ 最近错误和最近入站时间</text>
+    <text x="1000" y="408">2. 打开对话中心确认 session 是否卡住</text>
+    <text x="1000" y="446">3. 若未运行，执行一键诊断修复</text>
+  </g>
+  <rect x="356" y="524" width="1168" height="178" rx="24" fill="#fffdf9" stroke="#e0d6c9"/>
+  <text x="392" y="576" fill="#241c13" font-size="30" font-family="Segoe UI, Arial">对话中心</text>
+  <rect x="392" y="598" width="330" height="44" rx="14" fill="#fffaf3" stroke="#ddd4c5"/>
+  <text x="416" y="626" fill="#766a5f" font-size="20" font-family="Segoe UI, Arial">搜索关键词：4834 / 修复 / chatId</text>
+  <rect x="744" y="598" width="180" height="44" rx="14" fill="#fffaf3" stroke="#ddd4c5"/>
+  <text x="780" y="626" fill="#766a5f" font-size="20" font-family="Segoe UI, Arial">仅活跃</text>
+  <rect x="392" y="658" width="1096" height="28" rx="14" fill="#eef4ff"/>
+  <text x="420" y="678" fill="#2368f5" font-size="18" font-family="Segoe UI, Arial">QQ / 87978A81AE78EB8229D1E227A3239A8A · Session 4834be0b... · 消息数 54</text>
+  <rect x="356" y="730" width="754" height="176" rx="24" fill="#fffdf9" stroke="#e0d6c9"/>
+  <text x="392" y="782" fill="#241c13" font-size="30" font-family="Segoe UI, Arial">最近审计</text>
+  <text x="392" y="824" fill="#766a5f" font-size="22" font-family="Segoe UI, Arial">支持按关键词、方向、渠道过滤，并导出 JSON / CSV。</text>
+  <rect x="392" y="846" width="230" height="36" rx="12" fill="#f1ece3"/>
+  <text x="438" y="870" fill="#241c13" font-size="18" font-family="Segoe UI, Arial">导出 JSON</text>
+  <rect x="638" y="846" width="230" height="36" rx="12" fill="#f1ece3"/>
+  <text x="688" y="870" fill="#241c13" font-size="18" font-family="Segoe UI, Arial">导出 CSV</text>
+  <rect x="1146" y="730" width="378" height="176" rx="24" fill="#fffdf9" stroke="#e0d6c9"/>
+  <text x="1182" y="782" fill="#241c13" font-size="30" font-family="Segoe UI, Arial">告警阈值</text>
+  <g fill="#766a5f" font-size="20" font-family="Segoe UI, Arial">
+    <text x="1182" y="828">doctor MISS 阈值：1</text>
+    <text x="1182" y="860">会话静默阈值：30 分钟</text>
+    <text x="1182" y="892">通知级别：error 及以上</text>
+  </g>
+</svg>

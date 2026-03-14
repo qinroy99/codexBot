@@ -16,6 +16,16 @@ codexBot is a safe local bot bridge and management tool for IM + Codex workflows
 - 一键诊断修复与 stale PID 修复
 - 运行告警、建议模板、阈值设置
 
+## 预览
+
+### 控制台总览
+
+![codexBot console preview](./assets/console-preview.svg)
+
+### 对话详情
+
+![codexBot conversation preview](./assets/conversation-preview.svg)
+
 ## 项目结构
 
 - `scripts/`：启动、检查、配置脚本
@@ -23,6 +33,7 @@ codexBot is a safe local bot bridge and management tool for IM + Codex workflows
 - `vendor/Claude-to-IM-skill/`：桥接核心依赖
 - `config/`：本地配置模板
 - `.env.example`：环境变量样例
+- `INSTALL.md`：安装与启动指南
 
 ## 环境要求
 

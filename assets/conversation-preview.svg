@@ -1,0 +1,20 @@
+﻿<svg width="1400" height="920" viewBox="0 0 1400 920" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1400" height="920" fill="#efe8db"/>
+  <rect x="80" y="60" width="1240" height="800" rx="28" fill="#fffdf9"/>
+  <rect x="140" y="120" width="1120" height="680" rx="26" fill="#fffaf3" stroke="#ddd4c5"/>
+  <text x="188" y="182" fill="#241c13" font-size="34" font-family="Segoe UI, Arial">对话详情 · 87978A81AE78EB8229D1E227A3239A8A</text>
+  <text x="188" y="224" fill="#766a5f" font-size="22" font-family="Segoe UI, Arial">PID: 10964 · Session: 4834be0b-bdf8-4b71-9909-a1dca2852f90 · 当前 5 条 / 总计 54 条</text>
+  <rect x="188" y="256" width="280" height="44" rx="14" fill="#fffdf9" stroke="#ddd4c5"/>
+  <text x="214" y="284" fill="#766a5f" font-size="20" font-family="Segoe UI, Arial">关键词：修复</text>
+  <rect x="490" y="256" width="220" height="44" rx="14" fill="#fffdf9" stroke="#ddd4c5"/>
+  <text x="546" y="284" fill="#766a5f" font-size="20" font-family="Segoe UI, Arial">角色：assistant</text>
+  <rect x="188" y="332" width="1024" height="142" rx="24" fill="#eef4ff"/>
+  <text x="218" y="374" fill="#766a5f" font-size="18" font-family="Segoe UI, Arial">ASSISTANT</text>
+  <text x="218" y="418" fill="#241c13" font-size="24" font-family="Segoe UI, Arial">我会先按 claude-to-im 技能的诊断流程看当前状态，确认服务和最近日志，再判断问题是否已经修复。</text>
+  <rect x="188" y="500" width="1024" height="120" rx="24" fill="#eef4ff"/>
+  <text x="218" y="542" fill="#766a5f" font-size="18" font-family="Segoe UI, Arial">ASSISTANT</text>
+  <text x="218" y="586" fill="#241c13" font-size="24" font-family="Segoe UI, Arial">结论：桥接已恢复在线，当前需要关注的是最近会话是否还在长时间无响应。</text>
+  <rect x="188" y="648" width="1024" height="100" rx="24" fill="#f5efe5"/>
+  <text x="218" y="690" fill="#766a5f" font-size="18" font-family="Segoe UI, Arial">SYSTEM / FILTERS</text>
+  <text x="218" y="726" fill="#241c13" font-size="22" font-family="Segoe UI, Arial">支持自动刷新、关键词检索、角色过滤，适合排查长对话或失败链路。</text>
+</svg>
