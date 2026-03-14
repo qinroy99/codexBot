@@ -34,6 +34,7 @@ codexBot is a safe local bot bridge and management tool for IM + Codex workflows
 - `config/`：本地配置模板
 - `.env.example`：环境变量样例
 - `INSTALL.md`：安装与启动指南
+- `CONTRIBUTING.md`：协作与提交流程
 
 ## 环境要求
 
@@ -75,6 +76,15 @@ powershell -ExecutionPolicy Bypass -File .\scripts\bridge-control.ps1 stop
 powershell -ExecutionPolicy Bypass -File .\scripts\bridge-control.ps1 logs 80
 powershell -ExecutionPolicy Bypass -File .\scripts\bridge-control.ps1 doctor
 ```
+
+## 协作入口
+
+- 安装说明：[INSTALL.md](./INSTALL.md)
+- 协作说明：[CONTRIBUTING.md](./CONTRIBUTING.md)
+- 安全策略：[SECURITY.md](./SECURITY.md)
+- 行为准则：[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+- 版本变更：[CHANGELOG.md](./CHANGELOG.md)
+- Release 文案：`.github/release-notes/`
 
 ## 发布内容
 

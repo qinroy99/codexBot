@@ -1,0 +1,27 @@
+﻿name: Basic Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Show Node version
+        run: node -v
+
+      - name: Check ui-console server syntax
+        run: node --check ui-console/server.mjs
+
+      - name: Check frontend script syntax
+        run: node -e "const fs=require('fs'); new Function(fs.readFileSync('ui-console/public/app.js','utf8')); console.log('app.js syntax ok')"
