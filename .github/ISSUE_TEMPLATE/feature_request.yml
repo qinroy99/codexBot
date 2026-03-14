@@ -1,0 +1,28 @@
+﻿name: Feature Request
+description: 提出功能建议或产品改进方向
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目标
+      description: 想解决什么问题
+      placeholder: 例如：希望增加 Telegram 多会话筛选
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+      description: 你期望它如何工作
+  - type: textarea
+    id: value
+    attributes:
+      label: 价值
+      description: 这个功能会带来什么收益
+  - type: textarea
+    id: notes
+    attributes:
+      label: 补充信息
+      description: 可填写参考项目、截图、链接等
