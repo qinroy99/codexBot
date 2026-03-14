@@ -1,5 +1,14 @@
 ﻿# Changelog
 
+## v0.1.1 - 2026-03-14
+
+### Added
+
+- README 仓库预览图
+- `INSTALL.md` 安装说明
+- `RELEASE_NOTES_v0.1.1.md`
+- `.github/release-notes/v0.1.1.md`
+
 ## v0.1.0 - 2026-03-14
 
 ### Added
