@@ -1,5 +1,23 @@
 ﻿# Changelog
 
+## v0.1.2 - 2026-03-16
+
+### Changed
+
+- QQ 对话从会话列表升级为线程聚合视图
+- `GET /api/bridge/conversations` 返回线程级数据
+- `GET /api/bridge/messages` 支持 `threadKey` 聚合读取
+- Web 控制台新增左栏线程清单 + 右侧固定详情布局
+- 线程卡片新增最近时间、距今显示和紧凑统计信息
+- 修复 `scripts/ui-console.cmd` 启动内容异常问题
+
+### Docs
+
+- 新增 `archive/2026-03-16-qq-thread-console/ARCHIVE_SUMMARY.md`
+- 新增 `archive/2026-03-16-qq-thread-console/OPERATION_MANUAL.md`
+- 新增 `RELEASE_NOTES_v0.1.2.md`
+- 新增 `.github/release-notes/v0.1.2.md`
+
 ## v0.1.1 - 2026-03-14
 
 ### Added

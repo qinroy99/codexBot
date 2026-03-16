@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -106,19 +106,41 @@
         <div class="card">
           <div class="card-head">
             <div>
-              <h3>对话中心</h3>
-              <p>按当前 PID 查看会话，支持关键词与活跃状态过滤，点开弹窗查看完整消息并自动刷新。</p>
+              <h3>&#x7EBF;&#x7A0B;&#x4E2D;&#x5FC3;</h3>
+              <p>&#x6309; chatId &#x5C06; QQ &#x7B49;&#x6E20;&#x9053;&#x7684;&#x6865;&#x63A5;&#x5185;&#x5BB9;&#x805A;&#x5408;&#x4E3A;&#x72EC;&#x7ACB;&#x7EBF;&#x7A0B;&#x3002;</p>
             </div>
             <div class="actions wrap">
               <select id="conversation-pid" class="select-box"></select>
-              <button class="btn btn-ghost" id="refresh-conversations">刷新会话</button>
+              <button class="btn btn-ghost" id="refresh-conversations">&#x5237;&#x65B0;&#x7EBF;&#x7A0B;</button>
             </div>
           </div>
-          <div class="toolbar-row">
-            <label><span>搜索关键词</span><input id="conversation-search" type="text" placeholder="chatId / sessionId / 文本片段"></label>
-            <label><span>活跃状态</span><select id="conversation-active-filter" class="select-box"><option value="all">全部</option><option value="active">仅活跃</option><option value="inactive">仅停用</option></select></label>
+          <div class="toolbar-row thread-toolbar-row">
+            <label><span>&#x641C;&#x7D22;</span><input id="conversation-search" type="text" placeholder="chatId / sessionId / &#x6587;&#x672C;"></label>
+            <label><span>&#x6E20;&#x9053;</span><select id="conversation-channel-filter" class="select-box"><option value="all">&#x5168;&#x90E8;</option><option value="qq">QQ</option><option value="telegram">Telegram</option><option value="feishu">&#x98DE;&#x4E66;</option><option value="discord">Discord</option></select></label>
+            <label><span>&#x72B6;&#x6001;</span><select id="conversation-active-filter" class="select-box"><option value="all">&#x5168;&#x90E8;</option><option value="active">&#x6D3B;&#x8DC3;</option><option value="inactive">&#x505C;&#x7528;</option></select></label>
           </div>
-          <div id="conversation-list" class="stack"></div>
+          <div class="thread-workspace">
+            <div class="thread-sidebar-panel">
+              <div id="conversation-list" class="thread-list stack"></div>
+            </div>
+            <div class="thread-detail-panel">
+              <div class="card-head thread-detail-head">
+                <div>
+                  <h3 id="conversation-detail-title">&#x9009;&#x62E9;&#x4E00;&#x4E2A;&#x7EBF;&#x7A0B;</h3>
+                  <p id="conversation-detail-meta">&#x5F53;&#x524D;&#x8FD8;&#x6CA1;&#x6709;&#x6253;&#x5F00;&#x4EFB;&#x4F55;&#x7EBF;&#x7A0B;&#x3002;</p>
+                </div>
+                <div class="actions wrap">
+                  <label><span>&#x5173;&#x952E;&#x8BCD;</span><input id="message-search" type="text" placeholder="&#x641C;&#x7D22; messages"></label>
+                  <label><span>&#x89D2;&#x8272;</span><select id="message-role-filter" class="select-box"><option value="all">&#x5168;&#x90E8;</option><option value="user">&#x7528;&#x6237;</option><option value="assistant">&#x52A9;&#x624B;</option><option value="system">&#x7CFB;&#x7EDF;</option></select></label>
+                  <label class="mini-toggle"><input type="checkbox" id="auto-refresh-conversation" checked><span>&#x81EA;&#x52A8;&#x5237;&#x65B0;</span></label>
+                  <button class="btn btn-ghost" id="refresh-conversation-detail">&#x5237;&#x65B0;&#x8BE6;&#x60C5;</button>
+                </div>
+              </div>
+              <div id="conversation-message-list" class="message-list thread-message-list">
+                <div class="empty-card">&#x8BF7;&#x4ECE;&#x5DE6;&#x4FA7;&#x9009;&#x62E9;&#x7EBF;&#x7A0B;&#x4EE5;&#x67E5;&#x770B;&#x805A;&#x5408;&#x540E;&#x7684;&#x5B8C;&#x6574;&#x5BF9;&#x8BDD;&#x8BB0;&#x5F55;&#x3002;</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="grid two">
@@ -152,7 +174,7 @@
             <label><span>Bot Token</span><input id="tg-bot-token" type="password" placeholder="输入新的 Telegram Bot Token"><small id="tg-token-hint"></small></label>
             <label><span>Chat ID</span><input id="tg-chat-id" type="text" placeholder="可选，指定默认聊天"></label>
           </div>
-          <label><span>Allowed User IDs</span><input id="tg-allowed-users" type="text" placeholder="123, 456"></label>
+          <label><span>&#x5168;&#x90E8;owed &#x7528;&#x6237; IDs</span><input id="tg-allowed-users" type="text" placeholder="123, 456"></label>
           <div class="card-actions"><button class="btn btn-primary" id="save-telegram">保存 Telegram 设置</button><button class="btn btn-ghost" id="test-telegram">测试连接</button></div>
           <div class="inline-feedback" id="telegram-feedback"></div>
         </div>
@@ -167,7 +189,7 @@
           </div>
           <div class="form-grid">
             <label><span>Domain</span><input id="feishu-domain" type="text" placeholder="https://open.feishu.cn"></label>
-            <label><span>Allowed Users</span><input id="feishu-allowed-users" type="text" placeholder="ou_xxx, ou_yyy"></label>
+            <label><span>&#x5168;&#x90E8;owed &#x7528;&#x6237;s</span><input id="feishu-allowed-users" type="text" placeholder="ou_xxx, ou_yyy"></label>
           </div>
           <div class="card-actions"><button class="btn btn-primary" id="save-feishu">保存飞书设置</button><button class="btn btn-ghost" id="test-feishu">测试连接</button></div>
           <div class="inline-feedback" id="feishu-feedback"></div>
@@ -179,11 +201,11 @@
         <div class="card">
           <div class="form-grid">
             <label><span>Bot Token</span><input id="discord-bot-token" type="password" placeholder="输入新的 Discord Bot Token"><small id="discord-token-hint"></small></label>
-            <label><span>Allowed Users</span><input id="discord-allowed-users" type="text" placeholder="user_id_1, user_id_2"></label>
+            <label><span>&#x5168;&#x90E8;owed &#x7528;&#x6237;s</span><input id="discord-allowed-users" type="text" placeholder="user_id_1, user_id_2"></label>
           </div>
           <div class="form-grid">
-            <label><span>Allowed Channels</span><input id="discord-allowed-channels" type="text" placeholder="channel_id_1, channel_id_2"></label>
-            <label><span>Allowed Guilds</span><input id="discord-allowed-guilds" type="text" placeholder="guild_id_1, guild_id_2"></label>
+            <label><span>&#x5168;&#x90E8;owed &#x6E20;&#x9053;s</span><input id="discord-allowed-channels" type="text" placeholder="channel_id_1, channel_id_2"></label>
+            <label><span>&#x5168;&#x90E8;owed Guilds</span><input id="discord-allowed-guilds" type="text" placeholder="guild_id_1, guild_id_2"></label>
           </div>
           <div class="card-actions"><button class="btn btn-primary" id="save-discord">保存 Discord 设置</button><button class="btn btn-ghost" id="test-discord">测试连接</button></div>
           <div class="inline-feedback" id="discord-feedback"></div>
@@ -203,7 +225,7 @@
         </div>
         <div class="card">
           <div class="card-head"><div><h3>允许的用户</h3><p>允许使用桥接的 user_openid，逗号分隔</p></div></div>
-          <label><span>Allowed User OpenIDs</span><input id="qq-allowed-users" type="text" placeholder="user_openid_1, user_openid_2"></label>
+          <label><span>&#x5168;&#x90E8;owed &#x7528;&#x6237; OpenIDs</span><input id="qq-allowed-users" type="text" placeholder="user_openid_1, user_openid_2"></label>
           <div class="card-actions"><button class="btn btn-primary" id="save-qq-users">保存</button></div>
         </div>
         <div class="card">
@@ -216,25 +238,6 @@
         </div>
       </section>
     </main>
-  </div>
-
-  <div class="modal-backdrop hidden" id="conversation-modal">
-    <div class="modal-panel">
-      <div class="modal-head">
-        <div>
-          <h3 id="conversation-modal-title">对话详情</h3>
-          <p id="conversation-modal-meta">加载中...</p>
-        </div>
-        <div class="actions wrap">
-          <label><span>关键词</span><input id="message-search" type="text" placeholder="搜索消息内容"></label>
-          <label><span>角色</span><select id="message-role-filter" class="select-box"><option value="all">全部</option><option value="user">用户</option><option value="assistant">助手</option><option value="system">系统</option></select></label>
-          <label class="mini-toggle"><input type="checkbox" id="auto-refresh-conversation" checked><span>自动刷新</span></label>
-          <button class="btn btn-ghost" id="refresh-conversation-detail">刷新</button>
-          <button class="btn btn-ghost" id="close-conversation-modal">关闭</button>
-        </div>
-      </div>
-      <div class="message-list" id="conversation-message-list"></div>
-    </div>
   </div>
 
   <script src="/app.js"></script>

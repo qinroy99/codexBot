@@ -1,1 +1,2 @@
-@echo off`r`npowershell -ExecutionPolicy Bypass -File "%~dp0ui-console.ps1" %*
+@echo off
+powershell -ExecutionPolicy Bypass -File "%~dp0ui-console.ps1" %*

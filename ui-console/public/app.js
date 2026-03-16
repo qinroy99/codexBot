@@ -1,4 +1,4 @@
-﻿const THRESHOLD_KEY = 'cti-ui-thresholds';
+const THRESHOLD_KEY = 'cti-ui-thresholds';
 
 const defaultThresholds = {
   doctorMissThreshold: 1,
@@ -63,13 +63,12 @@ const els = {
   suggestionList: document.getElementById('suggestion-list'),
   conversationPid: document.getElementById('conversation-pid'),
   conversationSearch: document.getElementById('conversation-search'),
+  conversationChannelFilter: document.getElementById('conversation-channel-filter'),
   conversationActiveFilter: document.getElementById('conversation-active-filter'),
   conversationList: document.getElementById('conversation-list'),
-  conversationModal: document.getElementById('conversation-modal'),
-  conversationModalTitle: document.getElementById('conversation-modal-title'),
-  conversationModalMeta: document.getElementById('conversation-modal-meta'),
+  conversationDetailTitle: document.getElementById('conversation-detail-title'),
+  conversationDetailMeta: document.getElementById('conversation-detail-meta'),
   conversationMessageList: document.getElementById('conversation-message-list'),
-  closeConversationModal: document.getElementById('close-conversation-modal'),
   refreshConversationDetail: document.getElementById('refresh-conversation-detail'),
   autoRefreshConversation: document.getElementById('auto-refresh-conversation'),
   messageSearch: document.getElementById('message-search'),
@@ -183,6 +182,26 @@ function buildQuery(params) {
     if (value !== undefined && value !== null && String(value) !== '') search.set(key, String(value));
   });
   return search.toString();
+}
+
+﻿function formatDateTime(value) {
+  if (!value) return '\u65E0';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
+}
+
+function formatFreshness(value) {
+  if (!value) return '\u65E0\u66F4\u65B0';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '\u65F6\u95F4\u672A\u77E5';
+  const diffMinutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60000));
+  if (diffMinutes < 1) return '\u521A\u521A\u66F4\u65B0';
+  if (diffMinutes < 60) return `${diffMinutes} \u5206\u949F\u524D`;
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} \u5C0F\u65F6\u524D`;
+  const diffDays = Math.round(diffHours / 24);
+  return `${diffDays} \u5929\u524D`;
 }
 
 function fillThresholds() {
@@ -397,69 +416,101 @@ function renderDoctor(doctor) {
   updateInsights();
 }
 
-function renderConversations(items) {
+﻿function renderConversations(items) {
   state.conversations = items;
   if (!items.length) {
-    els.conversationList.innerHTML = '<div class="empty-card">当前筛选条件下暂无会话</div>';
+    els.conversationList.innerHTML = '<div class="empty-card">\u5F53\u524D\u7B5B\u9009\u6761\u4EF6\u4E0B\u6682\u65E0\u7EBF\u7A0B</div>';
+    if (!state.activeConversation) {
+      els.conversationDetailTitle.textContent = '\u9009\u62E9\u4E00\u4E2A\u7EBF\u7A0B';
+      els.conversationDetailMeta.textContent = '\u5F53\u524D\u8FD8\u6CA1\u6709\u6253\u5F00\u4EFB\u4F55\u7EBF\u7A0B\u3002';
+      els.conversationMessageList.innerHTML = '<div class="empty-card">\u8BF7\u4ECE\u5DE6\u4FA7\u9009\u62E9\u7EBF\u7A0B\u4EE5\u67E5\u770B\u805A\u5408\u540E\u7684\u5B8C\u6574\u5BF9\u8BDD\u8BB0\u5F55\u3002</div>';
+    }
     updateInsights();
     return;
   }
-  els.conversationList.innerHTML = items.map((item) => `
-    <div class="data-card">
-      <div class="data-card-head">
-        <strong>${escapeHtml(item.channelType)} / ${escapeHtml(item.chatId)}</strong>
-        <span class="mini-badge ${item.active ? 'is-success' : 'is-muted'}">${item.active ? '活跃' : '停用'}</span>
+  const activeThreadKey = state.activeConversation?.threadKey || '';
+  els.conversationList.innerHTML = items.map((item) => {
+    const selectedClass = item.threadKey === activeThreadKey ? ' is-active' : '';
+    return `
+      <div class="data-card thread-card${selectedClass}" data-thread-key="${escapeHtml(item.threadKey)}" data-session-id="${escapeHtml(item.latestSessionId || '')}">
+        <div class="thread-card-top">
+          <div class="thread-card-title-wrap">
+            <strong class="thread-card-title">${escapeHtml(item.channelType)} / ${escapeHtml(item.chatId)}</strong>
+            <div class="thread-card-subtitle">${escapeHtml(formatDateTime(item.updatedAt))}</div>
+          </div>
+          <div class="thread-card-badges">
+            <span class="mini-badge ${item.active ? 'is-success' : 'is-muted'}">${item.active ? '\u6D3B\u8DC3' : '\u505C\u7528'}</span>
+            <span class="mini-badge is-muted">${escapeHtml(formatFreshness(item.updatedAt))}</span>
+          </div>
+        </div>
+        <div class="thread-card-stats">
+          <span>\u6D88\u606F ${escapeHtml(item.messageCount || 0)}</span>
+          <span>\u4F1A\u8BDD ${escapeHtml(item.sessionCount || 0)}</span>
+          <span>\u5165/${escapeHtml(item.inboundCount || 0)} \u51FA/${escapeHtml(item.outboundCount || 0)}</span>
+        </div>
+        <div class="audit-summary">${escapeHtml(item.lastPreview || '\u6682\u65E0\u6D88\u606F')}</div>
       </div>
-      <div class="data-grid">
-        <div><span>PID</span><strong>${escapeHtml(item.pid || '无')}</strong></div>
-        <div><span>消息数</span><strong>${escapeHtml(item.messageCount || 0)}</strong></div>
-        <div><span>会话 ID</span><strong>${escapeHtml(item.sessionId || '无')}</strong></div>
-        <div><span>更新时间</span><strong>${escapeHtml(item.updatedAt || '无')}</strong></div>
-      </div>
-      <div class="audit-summary">${escapeHtml(item.lastPreview || '暂无消息')}</div>
-      <div class="card-actions right-align"><button class="btn btn-primary js-open-conversation" data-session-id="${escapeHtml(item.sessionId)}">查看对话详情</button></div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
   updateInsights();
 }
 
-function renderConversationModal(detail) {
-  state.activeConversation = detail;
-  els.conversationModalTitle.textContent = `对话详情 · ${detail.binding?.chatId || detail.sessionId}`;
-  els.conversationModalMeta.textContent = `PID: ${detail.pid || '无'} | Session: ${detail.sessionId} | 当前 ${detail.messageCount} 条 / 过滤后 ${detail.filteredCount} 条 / 总计 ${detail.totalCount} 条`;
+function renderConversationDetail(detail) {
+  state.activeConversation = {
+    ...detail,
+    threadKey: detail.threadKey || state.activeConversation?.threadKey || '',
+    sessionId: detail.sessionId || state.activeConversation?.sessionId || '',
+  };
+  const titleSuffix = detail.scope === 'thread'
+    ? `${detail.channelType || 'unknown'} / ${detail.chatId || 'unknown'}`
+    : `${detail.binding?.chatId || detail.sessionId}`;
+  const scopeMeta = detail.scope === 'thread'
+    ? `\u7EBF\u7A0B ${detail.threadKey || 'unknown'} | \u5173\u8054\u4F1A\u8BDD ${detail.sessionIds?.length || 0}`
+    : `\u4F1A\u8BDD ${detail.sessionId}`;
+  els.conversationDetailTitle.textContent = `\u7EBF\u7A0B\u8BE6\u60C5 \u00B7 ${titleSuffix}`;
+  els.conversationDetailMeta.textContent = `PID: ${detail.pid || '\u65E0'} | ${scopeMeta} | \u5F53\u524D ${detail.messageCount} \u6761 / \u8FC7\u6EE4\u540E ${detail.filteredCount} \u6761 / \u603B\u8BA1 ${detail.totalCount} \u6761`;
   els.conversationMessageList.innerHTML = (detail.messages || []).length
     ? detail.messages.map((message) => `
       <div class="message-item is-${escapeHtml(message.role || 'unknown')}">
-        <div class="message-role">${escapeHtml(message.role || 'unknown')}</div>
+        <div class="message-role">${escapeHtml(message.role || 'unknown')}${message.sessionId ? ` · ${escapeHtml(message.sessionId)}` : ''}</div>
         <div class="message-content">${escapeHtml(message.content || '')}</div>
       </div>
     `).join('')
-    : '<div class="empty-card">当前过滤条件下暂无对话消息</div>';
-  els.conversationModal.classList.remove('hidden');
+    : '<div class="empty-card">\u5F53\u524D\u8FC7\u6EE4\u6761\u4EF6\u4E0B\u6682\u65E0\u6D88\u606F<\/div>';
 }
 
-function closeConversationModal() {
-  els.conversationModal.classList.add('hidden');
+function resetConversationDetail() {
   if (state.conversationTimer) {
     window.clearInterval(state.conversationTimer);
     state.conversationTimer = null;
   }
   state.activeConversation = null;
+  els.conversationDetailTitle.textContent = '\u9009\u62E9\u4E00\u4E2A\u7EBF\u7A0B';
+  els.conversationDetailMeta.textContent = '\u5F53\u524D\u8FD8\u6CA1\u6709\u6253\u5F00\u4EFB\u4F55\u7EBF\u7A0B\u3002';
+  els.conversationMessageList.innerHTML = '<div class="empty-card">\u8BF7\u4ECE\u5DE6\u4FA7\u9009\u62E9\u7EBF\u7A0B\u4EE5\u67E5\u770B\u805A\u5408\u540E\u7684\u5B8C\u6574\u5BF9\u8BDD\u8BB0\u5F55\u3002</div>';
 }
 
-function collectMessageDetailQuery(sessionId) {
-  return buildQuery({ sessionId, limit: 200, q: els.messageSearch.value.trim(), role: els.messageRoleFilter.value });
+function collectMessageDetailQuery(target = {}) {
+  return buildQuery({
+    threadKey: target.threadKey || '',
+    sessionId: target.sessionId || '',
+    limit: 200,
+    q: els.messageSearch.value.trim(),
+    role: els.messageRoleFilter.value,
+  });
 }
 
-async function openConversationModal(sessionId) {
-  const detail = await api(`/api/bridge/messages?${collectMessageDetailQuery(sessionId)}`);
-  renderConversationModal(detail);
+async function openConversationDetail(target = {}) {
+  const detail = await api(`/api/bridge/messages?${collectMessageDetailQuery(target)}`);
+  renderConversationDetail(detail);
+  renderConversations(state.conversations);
   if (state.conversationTimer) window.clearInterval(state.conversationTimer);
   if (els.autoRefreshConversation.checked) {
     state.conversationTimer = window.setInterval(async () => {
-      if (!state.activeConversation?.sessionId) return;
-      const next = await api(`/api/bridge/messages?${collectMessageDetailQuery(state.activeConversation.sessionId)}`);
-      renderConversationModal(next);
+      if (!state.activeConversation?.threadKey && !state.activeConversation?.sessionId) return;
+      const next = await api(`/api/bridge/messages?${collectMessageDetailQuery(state.activeConversation)}`);
+      renderConversationDetail(next);
+      renderConversations(state.conversations);
     }, 5000);
   }
 }
@@ -481,7 +532,7 @@ function collectConfigPayload() {
 }
 
 function collectConversationQuery() {
-  return buildQuery({ pid: els.conversationPid.value || '', q: els.conversationSearch.value.trim(), active: els.conversationActiveFilter.value });
+  return buildQuery({ pid: els.conversationPid.value || '', q: els.conversationSearch.value.trim(), active: els.conversationActiveFilter.value, channelType: els.conversationChannelFilter.value });
 }
 
 function collectAuditQuery(limit = 30) {
@@ -506,7 +557,13 @@ async function refreshDoctor() {
 }
 
 async function refreshConversations() {
-  renderConversations((await api(`/api/bridge/conversations?${collectConversationQuery()}`)).items || []);
+  const items = (await api(`/api/bridge/conversations?${collectConversationQuery()}`)).items || [];
+  renderConversations(items);
+  if (state.activeConversation?.threadKey) {
+    const exists = items.some((item) => item.threadKey === state.activeConversation.threadKey);
+    if (exists) await openConversationDetail({ threadKey: state.activeConversation.threadKey, sessionId: state.activeConversation.sessionId || '' });
+    else resetConversationDetail();
+  }
 }
 
 async function refreshAll() {
@@ -615,10 +672,10 @@ function exportAudit(format) {
   window.open(`/api/bridge/audit/export?format=${encodeURIComponent(format)}&${query}`, '_blank');
 }
 
-const debouncedConversationRefresh = debounce(() => refreshConversations().catch((err) => setFeedback(els.overviewFeedback, err.message || '刷新会话失败。', 'error')));
+const debouncedConversationRefresh = debounce(() => refreshConversations().catch((err) => setFeedback(els.overviewFeedback, err.message || '\u5237\u65B0\u7EBF\u7A0B\u5931\u8D25\u3002', 'error')));
 const debouncedAuditRefresh = debounce(() => refreshAudit().catch((err) => setFeedback(els.overviewFeedback, err.message || '刷新审计失败。', 'error')));
 const debouncedMessageRefresh = debounce(() => {
-  if (state.activeConversation?.sessionId) openConversationModal(state.activeConversation.sessionId).catch((err) => setFeedback(els.overviewFeedback, err.message || '刷新消息失败。', 'error'));
+  if (state.activeConversation?.threadKey || state.activeConversation?.sessionId) openConversationDetail(state.activeConversation).catch((err) => setFeedback(els.overviewFeedback, err.message || '\u5237\u65B0\u6D88\u606F\u5931\u8D25\u3002', 'error'));
 });
 
 els.navItems.forEach((item) => item.addEventListener('click', () => showPanel(item.dataset.panel)));
@@ -630,6 +687,7 @@ els.refreshDoctor.addEventListener('click', refreshDoctor);
 els.refreshConversations.addEventListener('click', refreshConversations);
 els.conversationPid.addEventListener('change', refreshConversations);
 els.conversationSearch.addEventListener('input', debouncedConversationRefresh);
+els.conversationChannelFilter.addEventListener('change', refreshConversations);
 els.conversationActiveFilter.addEventListener('change', refreshConversations);
 els.auditSearch.addEventListener('input', debouncedAuditRefresh);
 els.auditDirectionFilter.addEventListener('change', refreshAudit);
@@ -639,39 +697,46 @@ els.exportAuditCsv.addEventListener('click', () => exportAudit('csv'));
 els.saveThresholds.addEventListener('click', saveThresholdValues);
 els.messageSearch.addEventListener('input', debouncedMessageRefresh);
 els.messageRoleFilter.addEventListener('change', () => {
-  if (state.activeConversation?.sessionId) openConversationModal(state.activeConversation.sessionId).catch(() => {});
+  if (state.activeConversation?.threadKey || state.activeConversation?.sessionId) openConversationDetail(state.activeConversation).catch(() => {});
+});
+els.refreshConversationDetail.addEventListener('click', async () => {
+  if (state.activeConversation?.threadKey || state.activeConversation?.sessionId) await openConversationDetail(state.activeConversation);
+});
+els.autoRefreshConversation.addEventListener('change', async () => {
+  if (!state.activeConversation?.threadKey && !state.activeConversation?.sessionId) return;
+  await openConversationDetail(state.activeConversation);
 });
 els.autoRefreshLogs.addEventListener('change', connectLogStream);
 els.enableNotifications.addEventListener('click', async () => {
   if (!('Notification' in window)) {
-    setFeedback(els.overviewFeedback, '当前浏览器不支持桌面通知。', 'error');
+    setFeedback(els.overviewFeedback, '\u5F53\u524D\u6D4F\u89C8\u5668\u4E0D\u652F\u6301\u684C\u9762\u901A\u77E5\u3002', 'error');
     return;
   }
   const permission = await Notification.requestPermission();
-  setFeedback(els.overviewFeedback, permission === 'granted' ? '运行告警通知已启用。' : '未授予通知权限。', permission === 'granted' ? 'success' : 'error');
+  setFeedback(els.overviewFeedback, permission === 'granted' ? '\u684C\u9762\u544A\u8B66\u901A\u77E5\u5DF2\u542F\u7528\u3002' : '\u672A\u6388\u4E88\u901A\u77E5\u6743\u9650\u3002', permission === 'granted' ? 'success' : 'error');
 });
 els.startBridge.addEventListener('click', async () => {
   const result = await api('/api/bridge/start', { method: 'POST' });
-  setFeedback(els.overviewFeedback, result.stdout || result.stderr || '桥接启动命令已发送。', result.ok ? 'success' : 'error');
+  setFeedback(els.overviewFeedback, result.stdout || result.stderr || '\u5DF2\u53D1\u9001 bridge \u542F\u52A8\u547D\u4EE4\u3002', result.ok ? 'success' : 'error');
   await refreshAll();
 });
 els.stopBridge.addEventListener('click', async () => {
   const result = await api('/api/bridge/stop', { method: 'POST' });
-  setFeedback(els.overviewFeedback, result.stdout || result.stderr || '桥接停止命令已发送。', result.ok ? 'success' : 'error');
+  setFeedback(els.overviewFeedback, result.stdout || result.stderr || '\u5DF2\u53D1\u9001 bridge \u505C\u6B62\u547D\u4EE4\u3002', result.ok ? 'success' : 'error');
   await refreshAll();
 });
 els.restartBridge.addEventListener('click', async () => {
   const result = await api('/api/bridge/restart', { method: 'POST' });
-  setFeedback(els.overviewFeedback, result.start?.stdout || result.start?.stderr || '桥接重启命令已发送。', result.ok ? 'success' : 'error');
+  setFeedback(els.overviewFeedback, result.start?.stdout || result.start?.stderr || '\u5DF2\u53D1\u9001 bridge \u91CD\u542F\u547D\u4EE4\u3002', result.ok ? 'success' : 'error');
   await refreshAll();
 });
 els.repairPid.addEventListener('click', async () => {
   const result = await api('/api/bridge/repair-pid', { method: 'POST' });
-  setFeedback(els.overviewFeedback, result.message || '已尝试修复 stale PID。', result.ok ? 'success' : 'error');
+  setFeedback(els.overviewFeedback, result.message || '\u5DF2\u5C1D\u8BD5\u4FEE\u590D stale PID\u3002', result.ok ? 'success' : 'error');
   await refreshAll();
 });
 els.runAutoRepair.addEventListener('click', async () => {
-  setFeedback(els.overviewFeedback, '正在执行一键诊断修复...', 'success');
+  setFeedback(els.overviewFeedback, '\u6B63\u5728\u6267\u884C\u81EA\u52A8\u4FEE\u590D...', 'success');
   const result = await api('/api/bridge/repair', { method: 'POST', body: '{}' });
   setFeedback(els.overviewFeedback, [result.message, ...(result.actions || []).map((item) => `${item.step}: ${item.message}`)].join('\n'), result.ok ? 'success' : 'error');
   renderDoctor(result.doctor || { lines: [], summary: { ok: 0, miss: 0, info: 0 } });
@@ -684,17 +749,10 @@ els.bindingsList.addEventListener('click', async (event) => {
   if (button) await toggleBinding(button.dataset.bindingKey, button.dataset.active === 'true');
 });
 els.conversationList.addEventListener('click', async (event) => {
-  const button = event.target.closest('.js-open-conversation');
-  if (button) await openConversationModal(button.dataset.sessionId);
+  const card = event.target.closest('[data-thread-key]');
+  if (!card) return;
+  await openConversationDetail({ threadKey: card.dataset.threadKey, sessionId: card.dataset.sessionId || '' });
 });
-els.closeConversationModal.addEventListener('click', closeConversationModal);
-els.conversationModal.addEventListener('click', (event) => { if (event.target === els.conversationModal) closeConversationModal(); });
-els.refreshConversationDetail.addEventListener('click', async () => { if (state.activeConversation?.sessionId) await openConversationModal(state.activeConversation.sessionId); });
-els.autoRefreshConversation.addEventListener('change', async () => {
-  if (!state.activeConversation?.sessionId) return;
-  await openConversationModal(state.activeConversation.sessionId);
-});
-
 els.saveOverview.addEventListener('click', () => saveConfig('渠道配置已保存。', els.overviewFeedback));
 els.saveTelegram.addEventListener('click', () => saveConfig('Telegram 设置已保存。', els.telegramFeedback));
 els.saveFeishu.addEventListener('click', () => saveConfig('飞书设置已保存。', els.feishuFeedback));

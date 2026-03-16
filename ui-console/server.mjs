@@ -118,6 +118,21 @@ function normalizeChannelType(value) {
   return ['telegram', 'feishu', 'discord', 'qq'].includes(type) ? type : 'all';
 }
 
+function buildThreadKey(channelType, chatId) {
+  return `${normalizeText(channelType) || 'unknown'}:${normalizeText(chatId) || 'unknown'}`;
+}
+
+function parseThreadKey(threadKey) {
+  const raw = normalizeText(threadKey);
+  const idx = raw.indexOf(':');
+  if (idx < 0) return { channelType: '', chatId: raw };
+  return { channelType: raw.slice(0, idx), chatId: raw.slice(idx + 1) };
+}
+
+function compareIsoDesc(a, b) {
+  return String(b || '').localeCompare(String(a || ''));
+}
+
 function normalizeDomain(domain, fallback) {
   const trimmed = normalizeText(domain);
   if (!trimmed) return fallback;
@@ -312,55 +327,200 @@ async function getAudit(limit = 50, filters = {}) {
   }).slice(0, limit).map((entry) => ({ ...entry, summary: parseSummary(entry) }));
 }
 
-async function listConversations(pid = '', filters = {}) {
-  const bindings = await getBindings();
-  const sessions = await readJsonFile(SESSIONS_PATH, {});
+async function buildConversationThreads(pid = '', filters = {}) {
+  const [bindings, sessions, audit] = await Promise.all([
+    getBindings(),
+    readJsonFile(SESSIONS_PATH, {}),
+    readJsonFile(AUDIT_PATH, []),
+  ]);
   const keyword = normalizeText(filters.q).toLowerCase();
   const active = normalizeActiveFilter(filters.active);
+  const channelTypeFilter = normalizeChannelType(filters.channelType);
   const targetPid = normalizeText(pid);
-  const results = [];
+  const threadMap = new Map();
+
+  const ensureThread = (channelType, chatId) => {
+    const threadKey = buildThreadKey(channelType, chatId);
+    if (!threadMap.has(threadKey)) {
+      threadMap.set(threadKey, {
+        threadKey,
+        channelType: normalizeText(channelType) || 'unknown',
+        chatId: normalizeText(chatId) || 'unknown',
+        active: false,
+        pids: new Set(),
+        workingDirectories: new Set(),
+        modes: new Set(),
+        sessionIds: new Set(),
+        latestSessionId: '',
+        messageCount: 0,
+        inboundCount: 0,
+        outboundCount: 0,
+        latestAuditAt: null,
+        updatedAt: null,
+        lastPreview: '',
+      });
+    }
+    return threadMap.get(threadKey);
+  };
+
   for (const binding of bindings) {
     const sessionId = binding.codepilotSessionId || binding.sdkSessionId || binding.sessionId;
-    if (!sessionId) continue;
+    const channelType = binding.channelType || 'unknown';
+    const chatId = binding.chatId || binding.bindingKey;
     const session = sessions[sessionId] || {};
     const sessionPid = String(binding.pid || session.pid || '');
     if (targetPid && sessionPid !== targetPid) continue;
+    if (channelTypeFilter !== 'all' && channelType !== channelTypeFilter) continue;
     if (active === 'active' && binding.active === false) continue;
     if (active === 'inactive' && binding.active !== false) continue;
-    const messages = await readJsonFile(path.join(MESSAGES_DIR, `${sessionId}.json`), []);
+    const thread = ensureThread(channelType, chatId);
+    const messages = sessionId ? await readJsonFile(path.join(MESSAGES_DIR, `${sessionId}.json`), []) : [];
     const lastMessage = [...messages].reverse().find((item) => item?.content);
     const lastPreview = String(lastMessage?.content || '').replace(/\s+/g, ' ').trim().slice(0, 180);
-    const item = {
-      bindingKey: binding.bindingKey,
-      sessionId,
-      pid: sessionPid,
-      active: binding.active !== false,
-      channelType: binding.channelType || session.channelType || 'unknown',
-      chatId: binding.chatId || session.chatId || binding.bindingKey,
-      updatedAt: binding.updatedAt || session.updatedAt || session.createdAt || null,
-      workingDirectory: binding.workingDirectory || session.workingDirectory || '',
-      mode: binding.mode || session.mode || '',
-      messageCount: messages.length,
-      lastPreview,
-    };
-    if (keyword) {
-      const haystack = [item.bindingKey, item.sessionId, item.pid, item.channelType, item.chatId, item.workingDirectory, item.mode, item.lastPreview].join(' ').toLowerCase();
-      if (!haystack.includes(keyword)) continue;
+    const updatedAt = binding.updatedAt || session.updatedAt || session.createdAt || null;
+    thread.active = thread.active || binding.active !== false;
+    if (sessionPid) thread.pids.add(sessionPid);
+    if (binding.workingDirectory || session.workingDirectory) thread.workingDirectories.add(binding.workingDirectory || session.workingDirectory);
+    if (binding.mode || session.mode) thread.modes.add(binding.mode || session.mode);
+    if (sessionId) thread.sessionIds.add(sessionId);
+    thread.messageCount += messages.length;
+    if (compareIsoDesc(updatedAt, thread.updatedAt) < 0) {
+      thread.updatedAt = updatedAt;
+      thread.latestSessionId = sessionId || thread.latestSessionId;
+      if (lastPreview) thread.lastPreview = lastPreview;
     }
-    results.push(item);
+    if (!thread.lastPreview && lastPreview) thread.lastPreview = lastPreview;
   }
-  return results.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+
+  for (const entry of audit) {
+    const channelType = entry.channelType || 'unknown';
+    const chatId = entry.chatId || entry.bindingKey || 'unknown';
+    if (channelTypeFilter !== 'all' && channelType !== channelTypeFilter) continue;
+    const thread = ensureThread(channelType, chatId);
+    if (entry.direction === 'inbound') thread.inboundCount += 1;
+    if (entry.direction === 'outbound') thread.outboundCount += 1;
+    if (!thread.lastPreview || compareIsoDesc(entry.createdAt, thread.latestAuditAt) < 0) {
+      thread.latestAuditAt = entry.createdAt || thread.latestAuditAt;
+      if (parseSummary(entry)) thread.lastPreview = parseSummary(entry).slice(0, 180);
+    }
+    if (compareIsoDesc(entry.createdAt, thread.updatedAt) < 0) thread.updatedAt = entry.createdAt || thread.updatedAt;
+  }
+
+  const results = Array.from(threadMap.values()).map((thread) => {
+    const pids = Array.from(thread.pids);
+    const workingDirectories = Array.from(thread.workingDirectories);
+    const modes = Array.from(thread.modes);
+    const sessionIds = Array.from(thread.sessionIds);
+    return {
+      threadKey: thread.threadKey,
+      channelType: thread.channelType,
+      chatId: thread.chatId,
+      active: thread.active,
+      pid: pids[0] || '',
+      pids,
+      workingDirectory: workingDirectories[0] || '',
+      workingDirectories,
+      mode: modes[0] || '',
+      modes,
+      sessionIds,
+      sessionCount: sessionIds.length,
+      latestSessionId: thread.latestSessionId || sessionIds.at(-1) || '',
+      messageCount: thread.messageCount,
+      inboundCount: thread.inboundCount,
+      outboundCount: thread.outboundCount,
+      updatedAt: thread.updatedAt,
+      latestAuditAt: thread.latestAuditAt,
+      lastPreview: thread.lastPreview || '',
+    };
+  }).filter((item) => {
+    if (active === 'active' && !item.active) return false;
+    if (active === 'inactive' && item.active) return false;
+    if (targetPid && !(item.pids || []).includes(targetPid)) return false;
+    if (!keyword) return true;
+    const haystack = [
+      item.threadKey,
+      item.channelType,
+      item.chatId,
+      item.pid,
+      item.workingDirectory,
+      item.mode,
+      item.lastPreview,
+      ...(item.sessionIds || []),
+    ].join(' ').toLowerCase();
+    return haystack.includes(keyword);
+  });
+
+  return results.sort((a, b) => compareIsoDesc(a.updatedAt, b.updatedAt));
 }
+
+async function listConversations(pid = '', filters = {}) {
+  return buildConversationThreads(pid, filters);
+}
+
 async function getConversationDetail(sessionId, options = {}) {
-  if (!sessionId) throw new Error('缺少 sessionId。');
-  const bindings = await getBindings();
-  const sessions = await readJsonFile(SESSIONS_PATH, {});
-  const binding = bindings.find((item) => item.codepilotSessionId === sessionId || item.sdkSessionId === sessionId || item.sessionId === sessionId) || null;
-  const session = sessions[sessionId] || {};
-  const allMessages = await readJsonFile(path.join(MESSAGES_DIR, `${sessionId}.json`), []);
   const keyword = normalizeText(options.q).toLowerCase();
   const role = normalizeRole(options.role);
   const limit = Math.max(1, Number(options.limit || 200));
+  const threadKey = normalizeText(options.threadKey);
+  const bindings = await getBindings();
+  const sessions = await readJsonFile(SESSIONS_PATH, {});
+
+  if (threadKey) {
+    const { channelType, chatId } = parseThreadKey(threadKey);
+    const relatedBindings = bindings.filter((item) => {
+      const bindingChatId = String(item.chatId || item.bindingKey || '');
+      if (channelType && item.channelType !== channelType) return false;
+      if (chatId && bindingChatId !== chatId) return false;
+      return true;
+    });
+    const sessionEntries = [];
+    for (const binding of relatedBindings) {
+      const relatedSessionId = binding.codepilotSessionId || binding.sdkSessionId || binding.sessionId;
+      if (!relatedSessionId) continue;
+      const session = sessions[relatedSessionId] || {};
+      const messages = await readJsonFile(path.join(MESSAGES_DIR, `${relatedSessionId}.json`), []);
+      sessionEntries.push({
+        sessionId: relatedSessionId,
+        binding,
+        session,
+        pid: String(binding.pid || session.pid || ''),
+        updatedAt: binding.updatedAt || session.updatedAt || session.createdAt || null,
+        messages,
+      });
+    }
+    sessionEntries.sort((a, b) => compareIsoDesc(a.updatedAt, b.updatedAt) * -1);
+    const allMessages = sessionEntries.flatMap((entry) => entry.messages.map((message) => ({ ...message, sessionId: entry.sessionId })));
+    const filteredMessages = allMessages.filter((message) => {
+      if (role !== 'all' && String(message.role || '').toLowerCase() !== role) return false;
+      if (keyword && !String(message.content || '').toLowerCase().includes(keyword)) return false;
+      return true;
+    });
+    const messages = filteredMessages.slice(-limit);
+    const pids = Array.from(new Set(sessionEntries.map((entry) => entry.pid).filter(Boolean)));
+    return {
+      scope: 'thread',
+      threadKey,
+      channelType: channelType || (relatedBindings[0]?.channelType || 'unknown'),
+      chatId: chatId || (relatedBindings[0]?.chatId || relatedBindings[0]?.bindingKey || 'unknown'),
+      pid: pids[0] || '',
+      pids,
+      binding: relatedBindings[0] || null,
+      bindings: relatedBindings,
+      session: sessionEntries.at(-1)?.session || null,
+      sessionIds: sessionEntries.map((entry) => entry.sessionId),
+      totalCount: allMessages.length,
+      filteredCount: filteredMessages.length,
+      messageCount: messages.length,
+      role,
+      query: keyword,
+      messages,
+    };
+  }
+
+  if (!sessionId) throw new Error('ȱ�� sessionId �� threadKey��');
+  const binding = bindings.find((item) => item.codepilotSessionId === sessionId || item.sdkSessionId === sessionId || item.sessionId === sessionId) || null;
+  const session = sessions[sessionId] || {};
+  const allMessages = await readJsonFile(path.join(MESSAGES_DIR, `${sessionId}.json`), []);
   const filteredMessages = allMessages.filter((message) => {
     if (role !== 'all' && String(message.role || '').toLowerCase() !== role) return false;
     if (keyword && !String(message.content || '').toLowerCase().includes(keyword)) return false;
@@ -368,6 +528,7 @@ async function getConversationDetail(sessionId, options = {}) {
   });
   const messages = filteredMessages.slice(-limit);
   return {
+    scope: 'session',
     sessionId,
     pid: String(binding?.pid || session.pid || ''),
     binding,
@@ -623,8 +784,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/bridge/audit') return sendJson(res, 200, { items: await getAudit(Number(url.searchParams.get('limit') || '50'), { q: url.searchParams.get('q') || '', direction: url.searchParams.get('direction') || 'all', channelType: url.searchParams.get('channelType') || 'all' }) });
     if (req.method === 'GET' && url.pathname === '/api/bridge/doctor') return sendJson(res, 200, await runDoctor(Number(url.searchParams.get('lines') || '80')));
-    if (req.method === 'GET' && url.pathname === '/api/bridge/conversations') return sendJson(res, 200, { items: await listConversations(url.searchParams.get('pid') || '', { q: url.searchParams.get('q') || '', active: url.searchParams.get('active') || 'all' }) });
-    if (req.method === 'GET' && url.pathname === '/api/bridge/messages') return sendJson(res, 200, await getConversationDetail(url.searchParams.get('sessionId') || '', { limit: Number(url.searchParams.get('limit') || '200'), q: url.searchParams.get('q') || '', role: url.searchParams.get('role') || 'all' }));
+    if (req.method === 'GET' && url.pathname === '/api/bridge/conversations') return sendJson(res, 200, { items: await listConversations(url.searchParams.get('pid') || '', { q: url.searchParams.get('q') || '', active: url.searchParams.get('active') || 'all', channelType: url.searchParams.get('channelType') || 'all' }) });
+    if (req.method === 'GET' && url.pathname === '/api/bridge/messages') return sendJson(res, 200, await getConversationDetail(url.searchParams.get('sessionId') || '', { threadKey: url.searchParams.get('threadKey') || '', limit: Number(url.searchParams.get('limit') || '200'), q: url.searchParams.get('q') || '', role: url.searchParams.get('role') || 'all' }));
 
     if (req.method === 'POST' && url.pathname === '/api/bridge/config') { await writeConfig(JSON.parse((await readBody(req)) || '{}')); return sendJson(res, 200, { ok: true }); }
     if (req.method === 'POST' && url.pathname === '/api/bridge/start') { const result = await execPowerShell(['-File', BRIDGE_CONTROL, 'start'], 60000); return sendJson(res, 200, { ok: result.code === 0, stdout: result.stdout, stderr: result.stderr }); }
