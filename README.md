@@ -1,4 +1,4 @@
-﻿# codexBot
+# codexBot
 
 codexBot is a safe local bot bridge and management tool for IM + Codex workflows.
 
@@ -98,3 +98,5 @@ powershell -ExecutionPolicy Bypass -File .\scripts\bridge-control.ps1 doctor
 - 控制台运行依赖本机 `node`
 - 真实运行配置和日志仍位于 `C:\Users\Administrator\.claude-to-im`
 - 本仓库不包含任何生产密钥或用户数据
+- windows-host/im-side-panel 是给 Codex Windows 版预留的 IM 侧边面板原型
+- Release 包与源码仓库均不包含真实 API key、QQ App ID 或 QQ App Secret

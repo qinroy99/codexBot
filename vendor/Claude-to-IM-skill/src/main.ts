@@ -71,7 +71,7 @@ interface StatusInfo {
   runId?: string;
   startedAt?: string;
   channels?: string[];
-  lastExitReason?: string;
+  lastExitReason?: string | null;
 }
 
 function writeStatus(info: StatusInfo): void {
@@ -118,11 +118,12 @@ async function main(): Promise<void> {
           runId,
           startedAt: new Date().toISOString(),
           channels: config.enabledChannels,
+          lastExitReason: null,
         });
         console.log(`[claude-to-im] Bridge started (PID: ${process.pid}, channels: ${config.enabledChannels.join(', ')})`);
       },
       onBridgeStop: () => {
-        writeStatus({ running: false });
+        writeStatus({ running: false, lastExitReason: null });
         console.log('[claude-to-im] Bridge stopped');
       },
     },
@@ -147,7 +148,7 @@ async function main(): Promise<void> {
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGHUP', () => shutdown('SIGHUP'));
 
-  // ── Exit diagnostics ──
+  // Exit diagnostics
   process.on('unhandledRejection', (reason) => {
     console.error('[claude-to-im] unhandledRejection:', reason instanceof Error ? reason.stack || reason.message : reason);
     writeStatus({ running: false, lastExitReason: `unhandledRejection: ${reason instanceof Error ? reason.message : String(reason)}` });
@@ -164,7 +165,7 @@ async function main(): Promise<void> {
     console.log(`[claude-to-im] exit (code: ${code})`);
   });
 
-  // ── Heartbeat to keep event loop alive ──
+  // Heartbeat to keep event loop alive
   // setInterval is ref'd by default, preventing Node from exiting
   // when the event loop would otherwise be empty.
   setInterval(() => { /* keepalive */ }, 45_000);

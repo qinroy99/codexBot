@@ -1,4 +1,5 @@
 const THRESHOLD_KEY = 'cti-ui-thresholds';
+const PINNED_THREAD_KEY = 'cti-pinned-thread';
 
 const defaultThresholds = {
   doctorMissThreshold: 1,
@@ -26,10 +27,13 @@ const state = {
   conversationTimer: null,
   notifiedAlerts: new Set(),
   thresholds: loadThresholds(),
+  pinnedThreadKey: loadPinnedThread(),
 };
 
 const els = {
   navItems: [...document.querySelectorAll('.nav-item')],
+  panelJumpButtons: [...document.querySelectorAll('.js-open-panel')],
+  modeTemplateButtons: [...document.querySelectorAll('.js-mode-template')],
   panels: [...document.querySelectorAll('.panel')],
   statusPill: document.getElementById('status-pill'),
   heroSummary: document.getElementById('hero-summary'),
@@ -52,6 +56,7 @@ const els = {
   autoRefreshLogs: document.getElementById('auto-refresh-logs'),
   overviewFeedback: document.getElementById('overview-feedback'),
   bindingsFeedback: document.getElementById('bindings-feedback'),
+  workspaceFeedback: document.getElementById('workspace-feedback'),
   thresholdFeedback: document.getElementById('threshold-feedback'),
   saveOverview: document.getElementById('save-overview'),
   saveThresholds: document.getElementById('save-thresholds'),
@@ -68,8 +73,11 @@ const els = {
   conversationList: document.getElementById('conversation-list'),
   conversationDetailTitle: document.getElementById('conversation-detail-title'),
   conversationDetailMeta: document.getElementById('conversation-detail-meta'),
+  threadDetailSummary: document.getElementById('thread-detail-summary'),
   conversationMessageList: document.getElementById('conversation-message-list'),
   refreshConversationDetail: document.getElementById('refresh-conversation-detail'),
+  pinThread: document.getElementById('pin-thread'),
+  exportThreadJson: document.getElementById('export-thread-json'),
   autoRefreshConversation: document.getElementById('auto-refresh-conversation'),
   messageSearch: document.getElementById('message-search'),
   messageRoleFilter: document.getElementById('message-role-filter'),
@@ -86,6 +94,11 @@ const els = {
   channelDiscord: document.getElementById('channel-discord'),
   channelQq: document.getElementById('channel-qq'),
   autoStart: document.getElementById('auto-start'),
+  defaultWorkdir: document.getElementById('default-workdir'),
+  defaultMode: document.getElementById('default-mode'),
+  defaultModel: document.getElementById('default-model'),
+  codexPassModel: document.getElementById('codex-pass-model'),
+  saveWorkspaceDefaults: document.getElementById('save-workspace-defaults'),
   tgBotToken: document.getElementById('tg-bot-token'),
   tgTokenHint: document.getElementById('tg-token-hint'),
   tgChatId: document.getElementById('tg-chat-id'),
@@ -133,6 +146,22 @@ function loadThresholds() {
 
 function saveThresholdSettings() {
   localStorage.setItem(THRESHOLD_KEY, JSON.stringify(state.thresholds));
+}
+
+function loadPinnedThread() {
+  try {
+    return localStorage.getItem(PINNED_THREAD_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+function savePinnedThread(threadKey) {
+  state.pinnedThreadKey = threadKey || '';
+  try {
+    if (state.pinnedThreadKey) localStorage.setItem(PINNED_THREAD_KEY, state.pinnedThreadKey);
+    else localStorage.removeItem(PINNED_THREAD_KEY);
+  } catch {}
 }
 
 function showPanel(panelName) {
@@ -184,30 +213,313 @@ function buildQuery(params) {
   return search.toString();
 }
 
-﻿function formatDateTime(value) {
-  if (!value) return '\u65E0';
+function formatDateTime(value) {
+  if (!value) return '无';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
 function formatFreshness(value) {
-  if (!value) return '\u65E0\u66F4\u65B0';
+  if (!value) return '无更新';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '\u65F6\u95F4\u672A\u77E5';
+  if (Number.isNaN(date.getTime())) return '时间未知';
   const diffMinutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60000));
-  if (diffMinutes < 1) return '\u521A\u521A\u66F4\u65B0';
-  if (diffMinutes < 60) return `${diffMinutes} \u5206\u949F\u524D`;
+  if (diffMinutes < 1) return '刚刚更新';
+  if (diffMinutes < 60) return `${diffMinutes} 分钟前`;
   const diffHours = Math.round(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours} \u5C0F\u65F6\u524D`;
+  if (diffHours < 24) return `${diffHours} 小时前`;
   const diffDays = Math.round(diffHours / 24);
-  return `${diffDays} \u5929\u524D`;
+  return `${diffDays} 天前`;
 }
 
 function fillThresholds() {
   els.thresholdDoctorMiss.value = String(state.thresholds.doctorMissThreshold);
   els.thresholdStaleMinutes.value = String(state.thresholds.staleConversationMinutes);
   els.thresholdNotifyLevel.value = state.thresholds.notifyLevel;
+}
+
+function stringifyForDisplay(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function tryParseStructuredBlocks(content) {
+  const raw = typeof content === 'string' ? content.trim() : '';
+  if (!raw || (!raw.startsWith('[') && !raw.startsWith('{'))) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.some((item) => item && typeof item === 'object' && 'type' in item)) return parsed;
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.content) && parsed.content.some((item) => item && typeof item === 'object' && 'type' in item)) return parsed.content;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeToolResultContent(content) {
+  if (Array.isArray(content)) {
+    return content.map((item) => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object' && item.type === 'text') return item.text || '';
+      return stringifyForDisplay(item);
+    }).filter(Boolean).join('\n\n');
+  }
+  return stringifyForDisplay(content);
+}
+
+function summarizeInline(text, maxLength = 96) {
+  const oneLine = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!oneLine) return '';
+  return oneLine.length > maxLength ? `${oneLine.slice(0, maxLength)}...` : oneLine;
+}
+
+function getMessageBlocks(message) {
+  const blocks = tryParseStructuredBlocks(message.content);
+  if (!blocks) {
+    return [{
+      kind: 'text',
+      title: '消息正文',
+      body: String(message.content || '').trim() || '空消息',
+      raw: null,
+    }];
+  }
+  const normalized = blocks.map((block, index) => {
+    const type = String(block?.type || '').toLowerCase();
+    if (type === 'text') {
+      return {
+        kind: 'text',
+        title: blocks.length > 1 ? `回复片段 ${index + 1}` : '消息正文',
+        body: String(block.text || '').trim() || '空文本',
+        raw: block,
+      };
+    }
+    if (type === 'tool_use') {
+      return {
+        kind: 'tool-use',
+        title: block.name ? `工具调用 · ${block.name}` : '工具调用',
+        meta: block.id ? `调用 ID ${block.id}` : '',
+        body: stringifyForDisplay(block.input || {}),
+        toolName: String(block.name || ''),
+        toolUseId: String(block.id || ''),
+        raw: block,
+      };
+    }
+    if (type === 'tool_result') {
+      return {
+        kind: block.is_error ? 'tool-error' : 'tool-result',
+        title: block.is_error ? '工具结果 · 错误' : '工具结果',
+        meta: block.tool_use_id ? `对应 ${block.tool_use_id}` : '',
+        body: normalizeToolResultContent(block.content),
+        toolUseId: String(block.tool_use_id || ''),
+        isError: !!block.is_error,
+        raw: block,
+      };
+    }
+    return {
+      kind: 'json',
+      title: block?.type ? `结构化块 · ${block.type}` : `结构化块 ${index + 1}`,
+      body: stringifyForDisplay(block),
+      raw: block,
+    };
+  }).filter(Boolean);
+  return normalized.length ? normalized : [{
+    kind: 'text',
+    title: '消息正文',
+    body: String(message.content || '').trim() || '空消息',
+    raw: null,
+  }];
+}
+
+function describeMessageFlow(message, detail) {
+  const role = String(message.role || 'unknown').toLowerCase();
+  const channelLabel = detail.channelType ? detail.channelType.toUpperCase() : 'IM';
+  if (role === 'user') {
+    return {
+      direction: 'inbound',
+      title: `${channelLabel} 入站消息`,
+      badge: '入站',
+      summary: '来自外部 IM 渠道，准备交给 Codex 处理。',
+    };
+  }
+  if (role === 'assistant') {
+    return {
+      direction: 'outbound',
+      title: 'Codex 出站回复',
+      badge: '出站',
+      summary: '由 Codex 生成，准备回发到桥接渠道。',
+    };
+  }
+  return {
+    direction: 'internal',
+    title: 'Bridge 内部事件',
+    badge: '内部',
+    summary: '用于记录系统或桥接层状态。',
+  };
+}
+
+function buildToolTimelineSteps(blocks) {
+  const toolUses = blocks.filter((block) => block.kind === 'tool-use');
+  if (!toolUses.length) return [];
+
+  const totalAttemptsByTool = toolUses.reduce((acc, block) => {
+    const key = block.toolName || block.title || '工具调用';
+    acc.set(key, (acc.get(key) || 0) + 1);
+    return acc;
+  }, new Map());
+  const resultsById = new Map(
+    blocks
+      .filter((block) => block.kind === 'tool-result' || block.kind === 'tool-error')
+      .map((block) => [block.toolUseId || '', block]),
+  );
+  const seenAttempts = new Map();
+
+  return toolUses.map((block, index) => {
+    const toolName = block.toolName || block.title || `工具 ${index + 1}`;
+    const totalAttempts = totalAttemptsByTool.get(toolName) || 1;
+    const attempt = (seenAttempts.get(toolName) || 0) + 1;
+    seenAttempts.set(toolName, attempt);
+
+    const result = resultsById.get(block.toolUseId || '');
+    const isError = !!result?.isError;
+    const status = !result ? 'pending' : isError ? 'error' : attempt > 1 ? 'retry' : 'success';
+    const statusLabel = !result ? '等待结果' : isError ? '执行失败' : attempt > 1 ? '重试成功' : '执行成功';
+    const summary = result
+      ? summarizeInline(result.body || '')
+      : '当前消息记录里还没有对应的工具结果块。';
+
+    return {
+      index: index + 1,
+      title: toolName,
+      status,
+      statusLabel,
+      attempt,
+      totalAttempts,
+      durationLabel: result ? '耗时未采集' : '执行中',
+      summary: summary || (isError ? '工具返回了错误，但未附带详细文本。' : '工具结果为空。'),
+      callId: block.toolUseId || '',
+    };
+  });
+}
+
+function buildMessageExecutionMeta(message, flow, toolSteps, index, totalMessages) {
+  const retryCount = toolSteps.reduce((sum, step) => sum + Math.max(0, step.attempt - 1), 0);
+  const errorCount = toolSteps.filter((step) => step.status === 'error').length;
+  const pendingCount = toolSteps.filter((step) => step.status === 'pending').length;
+  const sequenceLabel = `步骤 ${index + 1}/${totalMessages}`;
+
+  if (flow.direction === 'inbound') {
+    return {
+      summary: '桥接已收下这条消息，并将它排入当前会话。',
+      chips: [sequenceLabel, '状态 已接收', '耗时未采集'],
+    };
+  }
+
+  if (flow.direction === 'outbound') {
+    if (toolSteps.length) {
+      const statusLabel = pendingCount ? '等待收口' : errorCount ? '部分失败' : '已完成';
+      return {
+        summary: errorCount
+          ? '这轮回复里包含工具失败或错误返回，适合继续盯失败点。'
+          : retryCount
+            ? '这轮回复经历过重试，最终已经完成回包。'
+            : '这轮回复的工具链已经执行完成，并进入回包阶段。',
+        chips: [
+          sequenceLabel,
+          `状态 ${statusLabel}`,
+          `工具 ${toolSteps.length}`,
+          retryCount ? `重试 ${retryCount}` : '重试 0',
+          pendingCount ? '耗时采集中' : '耗时未采集',
+        ],
+      };
+    }
+
+    return {
+      summary: '这是没有工具调用的直接回复，已由 Codex 生成并准备回发。',
+      chips: [sequenceLabel, '状态 已完成', '直出回复', '耗时未采集'],
+    };
+  }
+
+  return {
+    summary: '系统或桥接层补充的一条内部记录。',
+    chips: [sequenceLabel, '状态 内部记录'],
+  };
+}
+
+function renderToolTimeline(toolSteps) {
+  if (!toolSteps.length) return '';
+  return `
+    <div class="message-timeline">
+      <div class="message-timeline-head">
+        <strong>Agent 时间线</strong>
+        <span class="message-block-meta">工具 ${toolSteps.length} 步</span>
+      </div>
+      <div class="timeline-step-list">
+        ${toolSteps.map((step) => `
+          <div class="timeline-step is-${escapeHtml(step.status)}">
+            <div class="timeline-step-row">
+              <div class="timeline-step-title-wrap">
+                <span class="timeline-step-index">#${step.index}</span>
+                <strong>${escapeHtml(step.title)}</strong>
+              </div>
+              <span class="timeline-step-status is-${escapeHtml(step.status)}">${escapeHtml(step.statusLabel)}</span>
+            </div>
+            <div class="timeline-step-meta">
+              <span>${escapeHtml(step.durationLabel)}</span>
+              <span>${step.totalAttempts > 1 ? `第 ${step.attempt}/${step.totalAttempts} 次` : '首轮执行'}</span>
+              ${step.callId ? `<span>调用 ${escapeHtml(step.callId)}</span>` : ''}
+            </div>
+            <div class="timeline-step-summary">${escapeHtml(step.summary)}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderMessageCard(message, detail, index = 0, totalMessages = 1) {
+  const flow = describeMessageFlow(message, detail);
+  const blocks = getMessageBlocks(message);
+  const toolSteps = buildToolTimelineSteps(blocks);
+  const hasTools = toolSteps.length > 0;
+  const execution = buildMessageExecutionMeta(message, flow, toolSteps, index, totalMessages);
+  const badges = [
+    `<span class="message-flow-badge is-${flow.direction}">${escapeHtml(flow.badge)}</span>`,
+    `<span class="mini-badge is-muted">${escapeHtml(String(message.role || 'unknown'))}</span>`,
+    message.sessionId ? `<span class="mini-badge is-muted">会话 ${escapeHtml(message.sessionId)}</span>` : '',
+    hasTools ? '<span class="mini-badge is-success">含工具调用</span>' : '',
+  ].filter(Boolean).join('');
+  const executionHtml = execution.chips.length
+    ? `<div class="message-execution-strip">${execution.chips.map((chip) => `<span class="execution-chip">${escapeHtml(chip)}</span>`).join('')}</div>`
+    : '';
+  const blocksHtml = blocks.map((block) => `
+    <div class="message-block is-${escapeHtml(block.kind)}">
+      <div class="message-block-head">
+        <strong>${escapeHtml(block.title)}</strong>
+        ${block.meta ? `<span class="message-block-meta">${escapeHtml(block.meta)}</span>` : ''}
+      </div>
+      <pre class="message-block-content">${escapeHtml(block.body || '')}</pre>
+    </div>
+  `).join('');
+  return `
+    <div class="message-item is-${escapeHtml(String(message.role || 'unknown').toLowerCase())} is-${flow.direction}${hasTools ? ' has-tools' : ''}">
+      <div class="message-head">
+        <div class="message-head-main">
+          <strong>${escapeHtml(flow.title)}</strong>
+          <div class="message-source-line">${escapeHtml(execution.summary || flow.summary)}</div>
+        </div>
+        <div class="message-head-meta">${badges}</div>
+      </div>
+      ${executionHtml}
+      ${renderToolTimeline(toolSteps)}
+      <div class="message-block-list">${blocksHtml}</div>
+    </div>
+  `;
 }
 
 function fillConfig(config) {
@@ -218,6 +530,10 @@ function fillConfig(config) {
   els.channelDiscord.checked = enabled.has('discord');
   els.channelQq.checked = enabled.has('qq');
   els.autoStart.checked = !!config.autoStart;
+  els.defaultWorkdir.value = config.defaultWorkdir || 'F:\\QBot01';
+  els.defaultMode.value = config.defaultMode || 'code';
+  els.defaultModel.value = config.defaultModel || '';
+  els.codexPassModel.checked = !!config.codexPassModel;
 
   els.tgBotToken.value = '';
   els.tgTokenHint.textContent = config.telegram.hasToken ? `当前已保存 Token：${config.telegram.botTokenMasked}` : '当前尚未保存 Token';
@@ -243,13 +559,14 @@ function fillConfig(config) {
   els.qqImageEnabled.checked = !!config.qq.imageEnabled;
   els.qqMaxImageSize.value = String(config.qq.maxImageSize || 20);
 }
+
 function renderAdapter(name, adapter) {
   const labels = { telegram: 'Telegram', feishu: '飞书', discord: 'Discord', qq: 'QQ' };
   const lines = [
     `<div>启用状态：${adapter.enabled ? '已启用' : '未启用'}</div>`,
     `<div>运行状态：${adapter.running ? '运行中' : '未运行'}</div>`,
   ];
-  if ('ready' in adapter) lines.push(`<div>网关就绪：${adapter.ready ? '是' : '否'}</div>`);
+  if ('ready' in adapter) lines.push(`<div>就绪状态：${adapter.ready ? '是' : '否'}</div>`);
   if ('lastInboundAt' in adapter) lines.push(`<div>最近入站：${escapeHtml(adapter.lastInboundAt || '无')}</div>`);
   if ('lastOutboundAt' in adapter) lines.push(`<div>最近出站：${escapeHtml(adapter.lastOutboundAt || '无')}</div>`);
   if ('resumedAt' in adapter) lines.push(`<div>最近恢复：${escapeHtml(adapter.resumedAt || '无')}</div>`);
@@ -265,7 +582,7 @@ function renderStatus(status) {
   els.heroSummary.textContent = status.summaryText || (running ? '桥接当前在线' : '桥接当前未运行');
   const statusFile = status.statusFile || {};
   const meta = [
-    ['绑定数量', `${status.bindingsCount ?? 0}`],
+    ['活跃绑定', `${status.bindingsCount ?? 0}`],
     ['PID', statusFile.pid || '无'],
     ['Run ID', statusFile.runId || '无'],
     ['启动时间', statusFile.startedAt || '无'],
@@ -284,6 +601,7 @@ function renderPidOptions(pid) {
   els.conversationPid.innerHTML = options.map((item) => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`).join('');
   if (currentValue && options.some((item) => item.value === currentValue)) els.conversationPid.value = currentValue;
 }
+
 
 function renderAlerts(alerts) {
   if (!alerts.length) {
@@ -317,18 +635,18 @@ function deriveAlerts() {
   const status = state.status;
   const doctor = state.doctor;
   const thresholds = state.thresholds;
-  if (!status?.running) alerts.push({ level: 'critical', title: 'Bridge 未运行', detail: '当前桥接进程未在线，可尝试启动或一键诊断修复。' });
+  if (!status?.running) alerts.push({ level: 'critical', title: 'Bridge 未运行', detail: '当前桥接进程不在线，可以尝试启动或执行一键诊断修复。' });
   const qqError = status?.adapterState?.qq?.lastError;
   if (qqError) alerts.push({ level: 'error', title: 'QQ 适配器最近有错误', detail: qqError });
   if (status?.statusFile?.lastExitReason) alerts.push({ level: 'warn', title: '记录到最近退出原因', detail: status.statusFile.lastExitReason });
   const missCount = doctor?.summary?.miss || 0;
-  if (missCount > Number(thresholds.doctorMissThreshold || 0)) alerts.push({ level: 'warn', title: '诊断存在缺失项', detail: `doctor 检测到 ${missCount} 个 MISS 项，已超过阈值 ${thresholds.doctorMissThreshold}。` });
+  if (missCount > Number(thresholds.doctorMissThreshold || 0)) alerts.push({ level: 'warn', title: 'doctor 存在缺失项', detail: `doctor 检测到 ${missCount} 个 MISS 项，已超过阈值 ${thresholds.doctorMissThreshold}。` });
   const latestConversationAt = getLatestConversationAt();
   if (latestConversationAt && status?.running) {
     const diffMinutes = Math.round((Date.now() - latestConversationAt.getTime()) / 60000);
-    if (diffMinutes >= Number(thresholds.staleConversationMinutes || 30)) alerts.push({ level: 'warn', title: '会话长时间无新消息', detail: `最近一次会话更新时间距今约 ${diffMinutes} 分钟，超过阈值 ${thresholds.staleConversationMinutes} 分钟。` });
+    if (diffMinutes >= Number(thresholds.staleConversationMinutes || 30)) alerts.push({ level: 'warn', title: '会话长时间无新消息', detail: `最近一次会话更新距今约 ${diffMinutes} 分钟，超过阈值 ${thresholds.staleConversationMinutes} 分钟。` });
   }
-  if (String(status?.statusStderr || '').includes('spawn EPERM')) alerts.push({ level: 'info', title: '受限环境回退中', detail: '当前状态检测在受限环境下回退到本地文件读取，这不影响桌面版和本地直跑。' });
+  if (String(status?.statusStderr || '').includes('spawn EPERM')) alerts.push({ level: 'info', title: '当前为受限环境回退模式', detail: '状态检测已回退到本地文件读取，这不影响本机直跑和桌面壳接入。' });
   return alerts;
 }
 
@@ -336,16 +654,16 @@ function deriveSuggestions() {
   const items = [];
   const status = state.status;
   const doctor = state.doctor;
-  if (!status?.running) items.push({ title: '先恢复 bridge', detail: '优先点击“启动”或“一键诊断修复”，确认桥重新在线。' });
-  if ((doctor?.summary?.miss || 0) > Number(state.thresholds.doctorMissThreshold || 0)) items.push({ title: '处理 doctor 缺失项', detail: '根据诊断结果补齐 config、daemon 或命令行依赖。' });
+  if (!status?.running) items.push({ title: '先恢复 bridge', detail: '优先点击“启动桥接”或“一键诊断修复”，确认桥接重新在线。' });
+  if ((doctor?.summary?.miss || 0) > Number(state.thresholds.doctorMissThreshold || 0)) items.push({ title: '处理 doctor 缺失项', detail: '根据 doctor 结果补齐 config、daemon 或命令行依赖。' });
   const qqError = String(status?.adapterState?.qq?.lastError || '');
-  if (qqError.includes('Session timed out') || qqError.includes('Reconnect failed')) items.push({ title: '排查 QQ 网关抖动', detail: '如果频繁出现超时或重连失败，可先重启 bridge，再检查网络和代理链路。' });
+  if (qqError.includes('Session timed out') || qqError.includes('Reconnect failed')) items.push({ title: '排查 QQ 网关抖动', detail: '如果频繁出现超时或重连失败，先重启 bridge，再检查网络和代理链路。' });
   const latestConversationAt = getLatestConversationAt();
   if (latestConversationAt && state.status?.running) {
     const diffMinutes = Math.round((Date.now() - latestConversationAt.getTime()) / 60000);
-    if (diffMinutes >= Number(state.thresholds.staleConversationMinutes || 30)) items.push({ title: '检查最近会话是否堵塞', detail: '最近对话长时间没有更新，可查看消息详情抽屉确认是否卡在某个 session。' });
+    if (diffMinutes >= Number(state.thresholds.staleConversationMinutes || 30)) items.push({ title: '检查最近会话是否卡住', detail: '最近对话长时间没有更新，可以打开线程详情确认是否卡在某个 session。' });
   }
-  if (String(status?.statusStderr || '').includes('spawn EPERM')) items.push({ title: '切到本机直跑查看', detail: '如果当前是受限沙箱，建议直接运行 Web 版或桌面版，以获得完整的读写能力。' });
+  if (String(status?.statusStderr || '').includes('spawn EPERM')) items.push({ title: '切到本机直跑查看', detail: '如果当前是受限沙箱，建议直接运行 Web 版或桌面版以获得完整读写能力。' });
   return items;
 }
 
@@ -356,7 +674,7 @@ function maybeNotifyAlerts(alerts) {
     const key = `${alert.level}:${alert.title}:${alert.detail}`;
     if (state.notifiedAlerts.has(key)) return;
     state.notifiedAlerts.add(key);
-    new Notification(`桥接告警: ${alert.title}`, { body: alert.detail });
+    new Notification(`\u6865\u63a5\u544a\u8b66: ${alert.title}`, { body: alert.detail });
   });
 }
 
@@ -404,6 +722,7 @@ function renderAudit(items) {
     </div>
   `).join('');
 }
+
 function renderDoctor(doctor) {
   state.doctor = doctor;
   const summary = doctor.summary || { ok: 0, miss: 0, info: 0 };
@@ -412,25 +731,28 @@ function renderDoctor(doctor) {
     <div class="meta-chip danger-chip"><strong>MISS</strong><div>${summary.miss}</div></div>
     <div class="meta-chip"><strong>INFO</strong><div>${summary.info}</div></div>
   `;
-  els.doctorBox.textContent = (doctor.lines || []).join('\n') || '暂无诊断输出';
+  els.doctorBox.textContent = (doctor.lines || []).join('\n') || 'No doctor output yet.';
   updateInsights();
 }
 
-﻿function renderConversations(items) {
+function renderConversations(items) {
   state.conversations = items;
   if (!items.length) {
-    els.conversationList.innerHTML = '<div class="empty-card">\u5F53\u524D\u7B5B\u9009\u6761\u4EF6\u4E0B\u6682\u65E0\u7EBF\u7A0B</div>';
+    els.conversationList.innerHTML = '<div class="empty-card">当前筛选条件下暂无线程</div>';
     if (!state.activeConversation) {
-      els.conversationDetailTitle.textContent = '\u9009\u62E9\u4E00\u4E2A\u7EBF\u7A0B';
-      els.conversationDetailMeta.textContent = '\u5F53\u524D\u8FD8\u6CA1\u6709\u6253\u5F00\u4EFB\u4F55\u7EBF\u7A0B\u3002';
-      els.conversationMessageList.innerHTML = '<div class="empty-card">\u8BF7\u4ECE\u5DE6\u4FA7\u9009\u62E9\u7EBF\u7A0B\u4EE5\u67E5\u770B\u805A\u5408\u540E\u7684\u5B8C\u6574\u5BF9\u8BDD\u8BB0\u5F55\u3002</div>';
+      els.conversationDetailTitle.textContent = '选择一个线程';
+      els.conversationDetailMeta.textContent = '当前还没有打开任何线程。';
+      els.threadDetailSummary.innerHTML = '';
+      els.conversationMessageList.innerHTML = '<div class="empty-card">请从左侧选择线程以查看聚合后的完整对话记录。</div>';
     }
     updateInsights();
     return;
   }
   const activeThreadKey = state.activeConversation?.threadKey || '';
+  const pinnedThreadKey = state.pinnedThreadKey || '';
   els.conversationList.innerHTML = items.map((item) => {
     const selectedClass = item.threadKey === activeThreadKey ? ' is-active' : '';
+    const pinnedBadge = item.threadKey === pinnedThreadKey ? '<span class="mini-badge is-success">已固定</span>' : '';
     return `
       <div class="data-card thread-card${selectedClass}" data-thread-key="${escapeHtml(item.threadKey)}" data-session-id="${escapeHtml(item.latestSessionId || '')}">
         <div class="thread-card-top">
@@ -439,16 +761,17 @@ function renderDoctor(doctor) {
             <div class="thread-card-subtitle">${escapeHtml(formatDateTime(item.updatedAt))}</div>
           </div>
           <div class="thread-card-badges">
-            <span class="mini-badge ${item.active ? 'is-success' : 'is-muted'}">${item.active ? '\u6D3B\u8DC3' : '\u505C\u7528'}</span>
+            ${pinnedBadge}
+            <span class="mini-badge ${item.active ? 'is-success' : 'is-muted'}">${item.active ? '活跃' : '停用'}</span>
             <span class="mini-badge is-muted">${escapeHtml(formatFreshness(item.updatedAt))}</span>
           </div>
         </div>
         <div class="thread-card-stats">
-          <span>\u6D88\u606F ${escapeHtml(item.messageCount || 0)}</span>
-          <span>\u4F1A\u8BDD ${escapeHtml(item.sessionCount || 0)}</span>
-          <span>\u5165/${escapeHtml(item.inboundCount || 0)} \u51FA/${escapeHtml(item.outboundCount || 0)}</span>
+          <span>消息 ${escapeHtml(item.messageCount || 0)}</span>
+          <span>会话 ${escapeHtml(item.sessionCount || 0)}</span>
+          <span>入/${escapeHtml(item.inboundCount || 0)} 出/${escapeHtml(item.outboundCount || 0)}</span>
         </div>
-        <div class="audit-summary">${escapeHtml(item.lastPreview || '\u6682\u65E0\u6D88\u606F')}</div>
+        <div class="audit-summary">${escapeHtml(item.lastPreview || '暂无消息')}</div>
       </div>
     `;
   }).join('');
@@ -461,33 +784,43 @@ function renderConversationDetail(detail) {
     threadKey: detail.threadKey || state.activeConversation?.threadKey || '',
     sessionId: detail.sessionId || state.activeConversation?.sessionId || '',
   };
+  const relatedThread = state.conversations.find((item) => item.threadKey === state.activeConversation.threadKey) || null;
   const titleSuffix = detail.scope === 'thread'
     ? `${detail.channelType || 'unknown'} / ${detail.chatId || 'unknown'}`
     : `${detail.binding?.chatId || detail.sessionId}`;
   const scopeMeta = detail.scope === 'thread'
-    ? `\u7EBF\u7A0B ${detail.threadKey || 'unknown'} | \u5173\u8054\u4F1A\u8BDD ${detail.sessionIds?.length || 0}`
-    : `\u4F1A\u8BDD ${detail.sessionId}`;
-  els.conversationDetailTitle.textContent = `\u7EBF\u7A0B\u8BE6\u60C5 \u00B7 ${titleSuffix}`;
-  els.conversationDetailMeta.textContent = `PID: ${detail.pid || '\u65E0'} | ${scopeMeta} | \u5F53\u524D ${detail.messageCount} \u6761 / \u8FC7\u6EE4\u540E ${detail.filteredCount} \u6761 / \u603B\u8BA1 ${detail.totalCount} \u6761`;
+    ? `线程 ${detail.threadKey || 'unknown'} | 关联会话 ${detail.sessionIds?.length || 0}`
+    : `会话 ${detail.sessionId}`;
+  const templateSummary = [
+    relatedThread?.mode || detail.session?.mode || detail.binding?.mode || '未设置',
+    detail.session?.model || state.config?.defaultModel || '未指定模型',
+  ].join(' · ');
+  els.conversationDetailTitle.textContent = `线程详情 · ${titleSuffix}`;
+  els.conversationDetailMeta.textContent = `PID: ${detail.pid || '无'} | ${scopeMeta} | 当前 ${detail.messageCount} 条 / 过滤后 ${detail.filteredCount} 条 / 总计 ${detail.totalCount} 条`;
+  els.threadDetailSummary.innerHTML = [
+    ['Thread Key', detail.threadKey || '无'],
+    ['工作目录', relatedThread?.workingDirectory || detail.binding?.workingDirectory || '未绑定'],
+    ['运行模板', templateSummary],
+    ['消息流向', `入 ${relatedThread?.inboundCount || 0} / 出 ${relatedThread?.outboundCount || 0}`],
+  ].map(([label, value]) => `<div class="meta-chip"><strong>${escapeHtml(label)}</strong><div>${escapeHtml(String(value))}</div></div>`).join('');
+  if (els.pinThread) els.pinThread.textContent = state.pinnedThreadKey === state.activeConversation.threadKey ? '取消固定' : '固定线程';
+  if (els.exportThreadJson) els.exportThreadJson.disabled = !(detail.messages || []).length;
   els.conversationMessageList.innerHTML = (detail.messages || []).length
-    ? detail.messages.map((message) => `
-      <div class="message-item is-${escapeHtml(message.role || 'unknown')}">
-        <div class="message-role">${escapeHtml(message.role || 'unknown')}${message.sessionId ? ` · ${escapeHtml(message.sessionId)}` : ''}</div>
-        <div class="message-content">${escapeHtml(message.content || '')}</div>
-      </div>
-    `).join('')
-    : '<div class="empty-card">\u5F53\u524D\u8FC7\u6EE4\u6761\u4EF6\u4E0B\u6682\u65E0\u6D88\u606F<\/div>';
+    ? detail.messages.map((message, index, list) => renderMessageCard(message, detail, index, list.length)).join('')
+    : '<div class="empty-card">当前过滤条件下暂无消息</div>';
 }
-
 function resetConversationDetail() {
   if (state.conversationTimer) {
     window.clearInterval(state.conversationTimer);
     state.conversationTimer = null;
   }
   state.activeConversation = null;
-  els.conversationDetailTitle.textContent = '\u9009\u62E9\u4E00\u4E2A\u7EBF\u7A0B';
-  els.conversationDetailMeta.textContent = '\u5F53\u524D\u8FD8\u6CA1\u6709\u6253\u5F00\u4EFB\u4F55\u7EBF\u7A0B\u3002';
-  els.conversationMessageList.innerHTML = '<div class="empty-card">\u8BF7\u4ECE\u5DE6\u4FA7\u9009\u62E9\u7EBF\u7A0B\u4EE5\u67E5\u770B\u805A\u5408\u540E\u7684\u5B8C\u6574\u5BF9\u8BDD\u8BB0\u5F55\u3002</div>';
+  els.conversationDetailTitle.textContent = '选择一个线程';
+  els.conversationDetailMeta.textContent = '当前还没有打开任何线程。';
+  els.threadDetailSummary.innerHTML = '';
+  if (els.pinThread) els.pinThread.textContent = '固定线程';
+  if (els.exportThreadJson) els.exportThreadJson.disabled = true;
+  els.conversationMessageList.innerHTML = '<div class="empty-card">请从左侧选择线程以查看聚合后的完整对话记录。</div>';
 }
 
 function collectMessageDetailQuery(target = {}) {
@@ -498,6 +831,26 @@ function collectMessageDetailQuery(target = {}) {
     q: els.messageSearch.value.trim(),
     role: els.messageRoleFilter.value,
   });
+}
+
+function togglePinnedThread() {
+  const currentThreadKey = state.activeConversation?.threadKey || '';
+  if (!currentThreadKey) return;
+  savePinnedThread(state.pinnedThreadKey === currentThreadKey ? '' : currentThreadKey);
+  renderConversations(state.conversations);
+  if (state.activeConversation) renderConversationDetail(state.activeConversation);
+}
+
+function exportCurrentThreadJson() {
+  if (!state.activeConversation) return;
+  const blob = new Blob([JSON.stringify(state.activeConversation, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const safeKey = (state.activeConversation.threadKey || 'thread').replaceAll(':', '_');
+  link.href = url;
+  link.download = `${safeKey}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 async function openConversationDetail(target = {}) {
@@ -519,9 +872,10 @@ function collectConfigPayload() {
   return {
     runtime: state.config?.runtime || 'codex',
     enabledChannels: [els.channelTelegram.checked && 'telegram', els.channelFeishu.checked && 'feishu', els.channelDiscord.checked && 'discord', els.channelQq.checked && 'qq'].filter(Boolean),
-    defaultWorkdir: state.config?.defaultWorkdir || 'F:\\QBot01',
-    defaultMode: state.config?.defaultMode || 'code',
-    defaultModel: state.config?.defaultModel || '',
+    defaultWorkdir: els.defaultWorkdir.value.trim() || 'F:\\QBot01',
+    defaultMode: els.defaultMode.value || 'code',
+    defaultModel: els.defaultModel.value.trim(),
+    codexPassModel: !!els.codexPassModel.checked,
     autoStart: els.autoStart.checked,
     telegram: { botToken: els.tgBotToken.value.trim(), chatId: els.tgChatId.value.trim(), allowedUsers: els.tgAllowedUsers.value.trim() },
     feishu: { appId: els.feishuAppId.value.trim(), appSecret: els.feishuAppSecret.value.trim(), domain: els.feishuDomain.value.trim(), allowedUsers: els.feishuAllowedUsers.value.trim() },
@@ -541,13 +895,12 @@ function collectAuditQuery(limit = 30) {
 
 async function refreshLogs() {
   const data = await api('/api/bridge/logs?tail=80');
-  els.logBox.textContent = (data.lines || []).join('\n') || '暂无日志';
+  els.logBox.textContent = (data.lines || []).join('\n') || '\u6682\u65e0\u65e5\u5fd7';
 }
 
 async function refreshBindings() {
   renderBindings((await api('/api/bridge/bindings')).items || []);
 }
-
 async function refreshAudit() {
   renderAudit((await api(`/api/bridge/audit?${collectAuditQuery(50)}`)).items || []);
 }
@@ -563,9 +916,13 @@ async function refreshConversations() {
     const exists = items.some((item) => item.threadKey === state.activeConversation.threadKey);
     if (exists) await openConversationDetail({ threadKey: state.activeConversation.threadKey, sessionId: state.activeConversation.sessionId || '' });
     else resetConversationDetail();
+    return;
+  }
+  if (state.pinnedThreadKey) {
+    const pinned = items.find((item) => item.threadKey === state.pinnedThreadKey);
+    if (pinned) await openConversationDetail({ threadKey: pinned.threadKey, sessionId: pinned.latestSessionId || '' });
   }
 }
-
 async function refreshAll() {
   const [config, status, bindings, audit, doctor, conversations] = await Promise.all([
     api('/api/bridge/config'),
@@ -597,24 +954,24 @@ function stopLogStreaming() {
 function connectLogStream() {
   stopLogStreaming();
   if (!els.autoRefreshLogs.checked) {
-    setStreamStatus('日志流已暂停', 'idle');
+    setStreamStatus('\u65e5\u5fd7\u6d41\u5df2\u6682\u505c', 'idle');
     return;
   }
   if (typeof EventSource === 'undefined') {
-    setStreamStatus('浏览器不支持实时日志流', 'error');
+    setStreamStatus('\u6d4f\u89c8\u5668\u4e0d\u652f\u6301\u5b9e\u65f6\u65e5\u5fd7\u6d41', 'error');
     state.logTimer = window.setInterval(() => refreshLogs().catch(() => {}), 8000);
     return;
   }
   const source = new EventSource('/api/bridge/logs/stream?tail=80');
   state.logSource = source;
-  setStreamStatus('日志流连接中...', 'idle');
-  source.onopen = () => setStreamStatus('日志流已连接', 'success');
+  setStreamStatus('\u65e5\u5fd7\u6d41\u8fde\u63a5\u4e2d...','idle');
+  source.onopen = () => setStreamStatus('\u65e5\u5fd7\u6d41\u5df2\u8fde\u63a5', 'success');
   source.onmessage = (event) => {
     const payload = JSON.parse(event.data || '{}');
-    els.logBox.textContent = (payload.lines || []).join('\n') || '暂无日志';
+    els.logBox.textContent = (payload.lines || []).join('\n') || '\u6682\u65e0\u65e5\u5fd7';
   };
   source.onerror = () => {
-    setStreamStatus('日志流已断开，5 秒后重连', 'error');
+    setStreamStatus('\u65e5\u5fd7\u6d41\u5df2\u65ad\u5f00\uff0c5 \u79d2\u540e\u91cd\u8fde', 'error');
     source.close();
     state.logSource = null;
     if (!state.logTimer) {
@@ -642,7 +999,7 @@ async function runChannelTest(path, payload, target, pendingMessage) {
     const result = await api(path, { method: 'POST', body: JSON.stringify(payload) });
     setFeedback(target, result.message, result.ok ? 'success' : 'error');
   } catch (err) {
-    setFeedback(target, err.message || '连接测试失败。', 'error');
+    setFeedback(target, err.message || '\u8fde\u63a5\u6d4b\u8bd5\u5931\u8d25\u3002', 'error');
   }
 }
 
@@ -651,7 +1008,7 @@ async function toggleBinding(bindingKey, active) {
     const result = await api('/api/bridge/bindings/toggle', { method: 'POST', body: JSON.stringify({ bindingKey, active }) });
     setFeedback(els.bindingsFeedback, result.message, result.ok ? 'success' : 'error');
   } catch (err) {
-    setFeedback(els.bindingsFeedback, err.message || '切换绑定失败。', 'error');
+    setFeedback(els.bindingsFeedback, err.message || '\u5207\u6362\u7ed1\u5b9a\u5931\u8d25\u3002', 'error');
   }
   await refreshBindings();
 }
@@ -663,7 +1020,7 @@ function saveThresholdValues() {
     notifyLevel: els.thresholdNotifyLevel.value || defaultThresholds.notifyLevel,
   };
   saveThresholdSettings();
-  setFeedback(els.thresholdFeedback, '告警阈值已保存到本地浏览器。', 'success');
+  setFeedback(els.thresholdFeedback, '\u544a\u8b66\u9608\u503c\u5df2\u4fdd\u5b58\u5230\u672c\u5730\u6d4f\u89c8\u5668\u3002', 'success');
   updateInsights();
 }
 
@@ -673,12 +1030,18 @@ function exportAudit(format) {
 }
 
 const debouncedConversationRefresh = debounce(() => refreshConversations().catch((err) => setFeedback(els.overviewFeedback, err.message || '\u5237\u65B0\u7EBF\u7A0B\u5931\u8D25\u3002', 'error')));
-const debouncedAuditRefresh = debounce(() => refreshAudit().catch((err) => setFeedback(els.overviewFeedback, err.message || '刷新审计失败。', 'error')));
+const debouncedAuditRefresh = debounce(() => refreshAudit().catch((err) => setFeedback(els.overviewFeedback, err.message || '\u5237\u65b0\u5ba1\u8ba1\u5931\u8d25\u3002', 'error')));
 const debouncedMessageRefresh = debounce(() => {
   if (state.activeConversation?.threadKey || state.activeConversation?.sessionId) openConversationDetail(state.activeConversation).catch((err) => setFeedback(els.overviewFeedback, err.message || '\u5237\u65B0\u6D88\u606F\u5931\u8D25\u3002', 'error'));
 });
 
 els.navItems.forEach((item) => item.addEventListener('click', () => showPanel(item.dataset.panel)));
+els.panelJumpButtons.forEach((button) => button.addEventListener('click', () => showPanel(button.dataset.panelTarget)));
+els.modeTemplateButtons.forEach((button) => button.addEventListener('click', () => {
+  const nextMode = button.dataset.mode || 'code';
+  els.defaultMode.value = nextMode;
+  setFeedback(els.workspaceFeedback, '已切换默认模式到 ' + nextMode + '。', 'success');
+}));
 els.refreshStatus.addEventListener('click', async () => { clearFeedback(els.overviewFeedback); await refreshAll(); });
 els.refreshLogs.addEventListener('click', refreshLogs);
 els.refreshBindings.addEventListener('click', refreshBindings);
@@ -702,6 +1065,8 @@ els.messageRoleFilter.addEventListener('change', () => {
 els.refreshConversationDetail.addEventListener('click', async () => {
   if (state.activeConversation?.threadKey || state.activeConversation?.sessionId) await openConversationDetail(state.activeConversation);
 });
+els.pinThread.addEventListener('click', togglePinnedThread);
+els.exportThreadJson.addEventListener('click', exportCurrentThreadJson);
 els.autoRefreshConversation.addEventListener('change', async () => {
   if (!state.activeConversation?.threadKey && !state.activeConversation?.sessionId) return;
   await openConversationDetail(state.activeConversation);
@@ -736,7 +1101,7 @@ els.repairPid.addEventListener('click', async () => {
   await refreshAll();
 });
 els.runAutoRepair.addEventListener('click', async () => {
-  setFeedback(els.overviewFeedback, '\u6B63\u5728\u6267\u884C\u81EA\u52A8\u4FEE\u590D...', 'success');
+  setFeedback(els.overviewFeedback, '\u6B63\u5728\u6267\u884C\u81EA\u52A8\u4FEE\u590D...','success');
   const result = await api('/api/bridge/repair', { method: 'POST', body: '{}' });
   setFeedback(els.overviewFeedback, [result.message, ...(result.actions || []).map((item) => `${item.step}: ${item.message}`)].join('\n'), result.ok ? 'success' : 'error');
   renderDoctor(result.doctor || { lines: [], summary: { ok: 0, miss: 0, info: 0 } });
@@ -753,17 +1118,18 @@ els.conversationList.addEventListener('click', async (event) => {
   if (!card) return;
   await openConversationDetail({ threadKey: card.dataset.threadKey, sessionId: card.dataset.sessionId || '' });
 });
-els.saveOverview.addEventListener('click', () => saveConfig('渠道配置已保存。', els.overviewFeedback));
-els.saveTelegram.addEventListener('click', () => saveConfig('Telegram 设置已保存。', els.telegramFeedback));
-els.saveFeishu.addEventListener('click', () => saveConfig('飞书设置已保存。', els.feishuFeedback));
-els.saveDiscord.addEventListener('click', () => saveConfig('Discord 设置已保存。', els.discordFeedback));
-els.saveQqCredentials.addEventListener('click', () => saveConfig('QQ 凭据已保存。', els.qqTestResult));
-els.saveQqUsers.addEventListener('click', () => saveConfig('允许用户配置已保存。', els.qqTestResult));
-els.saveQqImages.addEventListener('click', () => saveConfig('图片设置已保存。', els.qqTestResult));
-els.testTelegram.addEventListener('click', () => runChannelTest('/api/bridge/test/telegram', { botToken: els.tgBotToken.value.trim() }, els.telegramFeedback, '正在测试 Telegram 连接...'));
-els.testFeishu.addEventListener('click', () => runChannelTest('/api/bridge/test/feishu', { appId: els.feishuAppId.value.trim(), appSecret: els.feishuAppSecret.value.trim(), domain: els.feishuDomain.value.trim() }, els.feishuFeedback, '正在测试飞书连接...'));
-els.testDiscord.addEventListener('click', () => runChannelTest('/api/bridge/test/discord', { botToken: els.discordBotToken.value.trim() }, els.discordFeedback, '正在测试 Discord 连接...'));
-els.testQqConnection.addEventListener('click', () => runChannelTest('/api/bridge/test/qq', { appId: els.qqAppId.value.trim(), appSecret: els.qqAppSecret.value.trim() }, els.qqTestResult, '正在测试 QQ 连接...'));
+els.saveOverview.addEventListener('click', () => saveConfig('\u6e20\u9053\u914d\u7f6e\u5df2\u4fdd\u5b58\u3002', els.overviewFeedback));
+els.saveWorkspaceDefaults.addEventListener('click', () => saveConfig('工作区默认值已保存。', els.workspaceFeedback));
+els.saveTelegram.addEventListener('click', () => saveConfig('Telegram \u8bbe\u7f6e\u5df2\u4fdd\u5b58\u3002', els.telegramFeedback));
+els.saveFeishu.addEventListener('click', () => saveConfig('\u98de\u4e66\u8bbe\u7f6e\u5df2\u4fdd\u5b58\u3002', els.feishuFeedback));
+els.saveDiscord.addEventListener('click', () => saveConfig('Discord \u8bbe\u7f6e\u5df2\u4fdd\u5b58\u3002', els.discordFeedback));
+els.saveQqCredentials.addEventListener('click', () => saveConfig('QQ \u51ed\u636e\u5df2\u4fdd\u5b58\u3002', els.qqTestResult));
+els.saveQqUsers.addEventListener('click', () => saveConfig('\u5141\u8bb8\u7528\u6237\u914d\u7f6e\u5df2\u4fdd\u5b58\u3002', els.qqTestResult));
+els.saveQqImages.addEventListener('click', () => saveConfig('\u56fe\u7247\u8bbe\u7f6e\u5df2\u4fdd\u5b58\u3002', els.qqTestResult));
+els.testTelegram.addEventListener('click', () => runChannelTest('/api/bridge/test/telegram', { botToken: els.tgBotToken.value.trim() }, els.telegramFeedback, '\u6b63\u5728\u6d4b\u8bd5 Telegram \u8fde\u63a5...'));
+els.testFeishu.addEventListener('click', () => runChannelTest('/api/bridge/test/feishu', { appId: els.feishuAppId.value.trim(), appSecret: els.feishuAppSecret.value.trim(), domain: els.feishuDomain.value.trim() }, els.feishuFeedback, '\u6b63\u5728\u6d4b\u8bd5\u98de\u4e66\u8fde\u63a5...'));
+els.testDiscord.addEventListener('click', () => runChannelTest('/api/bridge/test/discord', { botToken: els.discordBotToken.value.trim() }, els.discordFeedback, '\u6b63\u5728\u6d4b\u8bd5 Discord \u8fde\u63a5...'));
+els.testQqConnection.addEventListener('click', () => runChannelTest('/api/bridge/test/qq', { appId: els.qqAppId.value.trim(), appSecret: els.qqAppSecret.value.trim() }, els.qqTestResult, '\u6b63\u5728\u6d4b\u8bd5 QQ \u8fde\u63a5...'));
 
 window.addEventListener('beforeunload', () => {
   stopLogStreaming();
@@ -772,7 +1138,16 @@ window.addEventListener('beforeunload', () => {
 
 fillThresholds();
 refreshAll().then(connectLogStream).catch((err) => {
-  els.logBox.textContent = err.message || '初始化失败';
-  setFeedback(els.overviewFeedback, err.message || '初始化失败', 'error');
+  els.logBox.textContent = err.message || '\u521d\u59cb\u5316\u5931\u8d25';
+  setFeedback(els.overviewFeedback, err.message || '\u521d\u59cb\u5316\u5931\u8d25\u3002', 'error');
   connectLogStream();
 });
+
+
+
+
+
+
+
+
+

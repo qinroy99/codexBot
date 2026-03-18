@@ -6,6 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { createThreadPanelApi } from '../bridge-service/api/thread-panel-api.mjs';
+import { THREAD_PANEL_ROUTES } from '../shared/types/bridge-contracts.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,6 +15,8 @@ const __dirname = path.dirname(__filename);
 const PORT = Number(process.env.CTI_UI_PORT || 3210);
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
+const PANEL_PUBLIC_DIR = path.join(PROJECT_ROOT, 'windows-host', 'im-side-panel', 'public');
+const SHARED_PUBLIC_DIR = path.join(PROJECT_ROOT, 'shared');
 const BRIDGE_CONTROL = path.join(PROJECT_ROOT, 'scripts', 'bridge-control.ps1');
 const DOCTOR_SCRIPT = path.join(PROJECT_ROOT, 'vendor', 'Claude-to-IM-skill', 'scripts', 'doctor.ps1');
 const CTI_HOME = path.join(os.homedir(), '.claude-to-im');
@@ -27,7 +31,7 @@ const SESSIONS_PATH = path.join(DATA_DIR, 'sessions.json');
 const MESSAGES_DIR = path.join(DATA_DIR, 'messages');
 
 const CONFIG_ORDER = [
-  'CTI_RUNTIME', 'CTI_ENABLED_CHANNELS', 'CTI_DEFAULT_WORKDIR', 'CTI_DEFAULT_MODE', 'CTI_DEFAULT_MODEL', 'CTI_BRIDGE_AUTO_START',
+  'CTI_RUNTIME', 'CTI_ENABLED_CHANNELS', 'CTI_DEFAULT_WORKDIR', 'CTI_DEFAULT_MODE', 'CTI_DEFAULT_MODEL', 'CTI_CODEX_PASS_MODEL', 'CTI_BRIDGE_AUTO_START',
   'CTI_TG_BOT_TOKEN', 'CTI_TG_CHAT_ID', 'CTI_TG_ALLOWED_USERS',
   'CTI_FEISHU_APP_ID', 'CTI_FEISHU_APP_SECRET', 'CTI_FEISHU_DOMAIN', 'CTI_FEISHU_ALLOWED_USERS',
   'CTI_DISCORD_BOT_TOKEN', 'CTI_DISCORD_ALLOWED_USERS', 'CTI_DISCORD_ALLOWED_CHANNELS', 'CTI_DISCORD_ALLOWED_GUILDS',
@@ -154,6 +158,7 @@ async function readConfig(includeSecrets = false) {
     defaultWorkdir: entries.CTI_DEFAULT_WORKDIR || 'F:\\QBot01',
     defaultMode: entries.CTI_DEFAULT_MODE || 'code',
     defaultModel: entries.CTI_DEFAULT_MODEL || '',
+    codexPassModel: entries.CTI_CODEX_PASS_MODEL === 'true',
     autoStart: entries.CTI_BRIDGE_AUTO_START === 'true',
     telegram: {
       hasToken: !!entries.CTI_TG_BOT_TOKEN,
@@ -205,6 +210,7 @@ async function writeConfig(payload) {
   entries.CTI_DEFAULT_WORKDIR = payload.defaultWorkdir || 'F:\\QBot01';
   entries.CTI_DEFAULT_MODE = payload.defaultMode || 'code';
   entries.CTI_DEFAULT_MODEL = payload.defaultModel || '';
+  entries.CTI_CODEX_PASS_MODEL = payload.codexPassModel ? 'true' : 'false';
   entries.CTI_BRIDGE_AUTO_START = payload.autoStart ? 'true' : 'false';
   if (payload.telegram) {
     if (payload.telegram.botToken) entries.CTI_TG_BOT_TOKEN = payload.telegram.botToken;
@@ -517,7 +523,7 @@ async function getConversationDetail(sessionId, options = {}) {
     };
   }
 
-  if (!sessionId) throw new Error('ȱ�� sessionId �� threadKey��');
+  if (!sessionId) throw new Error('Missing sessionId or threadKey.');
   const binding = bindings.find((item) => item.codepilotSessionId === sessionId || item.sdkSessionId === sessionId || item.sessionId === sessionId) || null;
   const session = sessions[sessionId] || {};
   const allMessages = await readJsonFile(path.join(MESSAGES_DIR, `${sessionId}.json`), []);
@@ -571,7 +577,7 @@ async function getBridgeRuntimeStatus() {
   }
   return {
     running,
-    summaryText: running ? `桥接当前在线，已启用 ${config.enabledChannels.length || 0} 个渠道。` : '桥接当前未运行，可尝试启动或执行一键诊断修复。',
+    summaryText: running ? `Bridge online with ${config.enabledChannels.length || 0} enabled channel(s).` : 'Bridge not running. Try start or auto repair.',
     enabledChannels: config.enabledChannels,
     bindingsCount: bindings.length,
     recentLogs,
@@ -613,40 +619,40 @@ function requestJson(rawUrl, options = {}) {
 
 async function testTelegramConnection(config, payload) {
   const token = payload.botToken || config.telegram.botTokenRaw || '';
-  if (!token) return { ok: false, message: '请先填写 Telegram Bot Token。' };
+  if (!token) return { ok: false, message: 'Please enter a Telegram Bot Token first.' };
   const result = await requestJson(`https://api.telegram.org/bot${token}/getMe`);
-  if (result.json.ok) return { ok: true, message: `Telegram 连接测试通过：@${result.json.result?.username || 'unknown'}`, detail: result.json.result || {} };
-  return { ok: false, message: result.json.description || 'Telegram 连接测试失败。', detail: result.json };
+  if (result.json.ok) return { ok: true, message: `Telegram connection ok: @${result.json.result?.username || 'unknown'}`, detail: result.json.result || {} };
+  return { ok: false, message: result.json.description || 'Telegram connection failed.', detail: result.json };
 }
 
 async function testDiscordConnection(config, payload) {
   const token = payload.botToken || config.discord.botTokenRaw || '';
-  if (!token) return { ok: false, message: '请先填写 Discord Bot Token。' };
+  if (!token) return { ok: false, message: 'Please enter a Discord Bot Token first.' };
   const result = await requestJson('https://discord.com/api/v10/users/@me', { headers: { Authorization: `Bot ${token}` } });
-  if (result.statusCode >= 200 && result.statusCode < 300 && result.json.id) return { ok: true, message: `Discord 连接测试通过：${result.json.username || 'bot'}#${result.json.discriminator || '0'}`, detail: result.json };
-  return { ok: false, message: result.json.message || 'Discord 连接测试失败。', detail: result.json };
+  if (result.statusCode >= 200 && result.statusCode < 300 && result.json.id) return { ok: true, message: `Discord connection ok: ${result.json.username || 'bot'}#${result.json.discriminator || '0'}`, detail: result.json };
+  return { ok: false, message: result.json.message || 'Discord connection failed.', detail: result.json };
 }
 
 async function testFeishuConnection(config, payload) {
   const appId = payload.appId || config.feishu.appId || '';
   const appSecret = payload.appSecret || config.feishu.appSecretRaw || '';
   const domain = normalizeDomain(payload.domain || config.feishu.domain, 'https://open.feishu.cn');
-  if (!appId || !appSecret) return { ok: false, message: '请先填写飞书 App ID 和 App Secret。' };
+  if (!appId || !appSecret) return { ok: false, message: 'Please enter Feishu App ID and App Secret first.' };
   const result = await requestJson(`${domain}/open-apis/auth/v3/tenant_access_token/internal`, { method: 'POST', body: { app_id: appId, app_secret: appSecret } });
-  if (result.json.code === 0 && result.json.tenant_access_token) return { ok: true, message: '飞书连接测试通过，已成功获取 tenant_access_token。', expire: result.json.expire || null };
-  return { ok: false, message: result.json.msg || '飞书连接测试失败。', detail: result.json };
+  if (result.json.code === 0 && result.json.tenant_access_token) return { ok: true, message: 'Feishu connection ok: tenant_access_token acquired.', expire: result.json.expire || null };
+  return { ok: false, message: result.json.msg || 'Feishu connection failed.', detail: result.json };
 }
 
 async function testQqConnection(config, payload) {
   const appId = payload.appId || config.qq.appId || '';
   const appSecret = payload.appSecret || config.qq.appSecretRaw || '';
-  if (!appId || !appSecret) return { ok: false, message: '请填写 QQ App ID 和 App Secret。' };
+  if (!appId || !appSecret) return { ok: false, message: 'Please enter QQ App ID and App Secret first.' };
   const result = await requestJson('https://bots.qq.com/app/getAppAccessToken', { method: 'POST', body: { appId, clientSecret: appSecret } });
-  if (result.json.access_token) return { ok: true, message: 'QQ 连接测试通过，已成功获取 access_token。', expiresIn: result.json.expires_in || null };
-  return { ok: false, message: result.json.message || 'QQ 连接测试失败，未获取到 access_token。', detail: result.json };
+  if (result.json.access_token) return { ok: true, message: 'QQ connection ok: access_token acquired.', expiresIn: result.json.expires_in || null };
+  return { ok: false, message: result.json.message || 'QQ connection failed.', detail: result.json };
 }
 async function repairStalePid() {
-  try { await fsp.unlink(PID_PATH); return { ok: true, message: '已清理 bridge.pid。' }; }
+  try { await fsp.unlink(PID_PATH); return { ok: true, message: 'bridge.pid removed.' }; }
   catch (err) { return { ok: false, message: err instanceof Error ? err.message : String(err) }; }
 }
 
@@ -693,11 +699,11 @@ async function runDoctor(logLines = 80) {
 
 async function toggleBindingActive(bindingKey, active) {
   const bindings = await readJsonFile(BINDINGS_PATH, {});
-  if (!bindings[bindingKey]) throw new Error('未找到该绑定记录。');
+  if (!bindings[bindingKey]) throw new Error('Binding record not found.');
   bindings[bindingKey].active = !!active;
   bindings[bindingKey].updatedAt = new Date().toISOString();
   await writeJsonFile(BINDINGS_PATH, bindings);
-  return { ok: true, message: active ? '会话绑定已重新启用。' : '会话绑定已停用。' };
+  return { ok: true, message: active ? 'Binding re-enabled.' : 'Binding disabled.' };
 }
 
 async function runAutoRepair() {
@@ -708,17 +714,23 @@ async function runAutoRepair() {
   if (!status.running && config.exists) {
     try {
       const start = await execPowerShell(['-File', BRIDGE_CONTROL, 'start'], 60000);
-      actions.push({ step: 'start_bridge', ok: start.code === 0, message: start.stdout || start.stderr || '已尝试启动 bridge。' });
+      actions.push({ step: 'start_bridge', ok: start.code === 0, message: start.stdout || start.stderr || 'Bridge start attempted.' });
     } catch (err) {
       actions.push({ step: 'start_bridge', ok: false, message: err instanceof Error ? err.message : String(err) });
     }
   } else if (!config.exists) {
-    actions.push({ step: 'start_bridge', ok: false, message: '未找到 config.env，跳过自动启动。' });
+    actions.push({ step: 'start_bridge', ok: false, message: 'config.env not found. Auto start skipped.' });
   }
   const doctor = await runDoctor(60);
   const refreshedStatus = await getBridgeRuntimeStatus();
-  return { ok: actions.every((item) => item.ok !== false) && doctor.summary.miss === 0, message: actions.length ? '已完成一键诊断修复。' : '未发现需要自动修复的问题。', actions, doctor, status: refreshedStatus };
+  return { ok: actions.every((item) => item.ok !== false) && doctor.summary.miss === 0, message: actions.length ? 'Auto repair finished.' : 'No auto repair action was needed.', actions, doctor, status: refreshedStatus };
 }
+
+const threadPanelApi = createThreadPanelApi({
+  getStatus: getBridgeRuntimeStatus,
+  listConversations,
+  getConversationDetail,
+});
 
 function csvEscape(value) {
   const text = String(value ?? '');
@@ -733,18 +745,42 @@ function buildAuditCsv(items) {
   return rows.join('\r\n');
 }
 
-function serveStatic(req, res) {
-  let requestPath = req.url === '/' ? '/index.html' : req.url;
-  requestPath = requestPath.split('?')[0];
+function serveStaticFile(res, rootDir, requestPath) {
   const safePath = path.normalize(requestPath).replace(/^(\.\.[/\\])+/, '');
-  const filePath = path.join(PUBLIC_DIR, safePath);
-  if (!filePath.startsWith(PUBLIC_DIR)) return sendBuffer(res, 403, 'Forbidden');
+  const filePath = path.resolve(path.join(rootDir, safePath));
+  const normalizedRoot = path.resolve(rootDir);
+  if (!filePath.startsWith(normalizedRoot)) return sendBuffer(res, 403, 'Forbidden');
   fs.readFile(filePath, (err, data) => {
     if (err) return sendBuffer(res, 404, 'Not found');
     const ext = path.extname(filePath);
-    const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8' };
+    const types = {
+      '.html': 'text/html; charset=utf-8',
+      '.css': 'text/css; charset=utf-8',
+      '.js': 'application/javascript; charset=utf-8',
+      '.mjs': 'application/javascript; charset=utf-8',
+      '.json': 'application/json; charset=utf-8',
+      '.svg': 'image/svg+xml',
+    };
     sendBuffer(res, 200, data, types[ext] || 'application/octet-stream');
   });
+}
+
+function serveStatic(req, res) {
+  let requestPath = req.url === '/' ? '/index.html' : req.url;
+  requestPath = requestPath.split('?')[0];
+
+  if (requestPath === '/im-side-panel') requestPath = '/im-side-panel/';
+  if (requestPath.startsWith('/im-side-panel/')) {
+    const panelPath = requestPath.slice('/im-side-panel'.length) || '/';
+    return serveStaticFile(res, PANEL_PUBLIC_DIR, panelPath === '/' ? '/index.html' : panelPath);
+  }
+
+  if (requestPath.startsWith('/shared/')) {
+    const sharedPath = requestPath.slice('/shared'.length) || '/';
+    return serveStaticFile(res, SHARED_PUBLIC_DIR, sharedPath === '/' ? '/index.html' : sharedPath);
+  }
+
+  return serveStaticFile(res, PUBLIC_DIR, requestPath);
 }
 
 async function handleLogStream(req, res) {
@@ -786,6 +822,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/bridge/doctor') return sendJson(res, 200, await runDoctor(Number(url.searchParams.get('lines') || '80')));
     if (req.method === 'GET' && url.pathname === '/api/bridge/conversations') return sendJson(res, 200, { items: await listConversations(url.searchParams.get('pid') || '', { q: url.searchParams.get('q') || '', active: url.searchParams.get('active') || 'all', channelType: url.searchParams.get('channelType') || 'all' }) });
     if (req.method === 'GET' && url.pathname === '/api/bridge/messages') return sendJson(res, 200, await getConversationDetail(url.searchParams.get('sessionId') || '', { threadKey: url.searchParams.get('threadKey') || '', limit: Number(url.searchParams.get('limit') || '200'), q: url.searchParams.get('q') || '', role: url.searchParams.get('role') || 'all' }));
+    if (req.method === 'GET' && url.pathname === THREAD_PANEL_ROUTES.bootstrap) return sendJson(res, 200, await threadPanelApi.getBootstrap(url.searchParams));
+    if (req.method === 'GET' && url.pathname === THREAD_PANEL_ROUTES.thread) return sendJson(res, 200, await threadPanelApi.getThread(url.searchParams));
 
     if (req.method === 'POST' && url.pathname === '/api/bridge/config') { await writeConfig(JSON.parse((await readBody(req)) || '{}')); return sendJson(res, 200, { ok: true }); }
     if (req.method === 'POST' && url.pathname === '/api/bridge/start') { const result = await execPowerShell(['-File', BRIDGE_CONTROL, 'start'], 60000); return sendJson(res, 200, { ok: result.code === 0, stdout: result.stdout, stderr: result.stderr }); }
@@ -808,3 +846,8 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`[ui-console] http://127.0.0.1:${PORT}`);
 });
+
+
+
+
+

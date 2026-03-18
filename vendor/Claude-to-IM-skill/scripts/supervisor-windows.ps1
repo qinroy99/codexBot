@@ -27,7 +27,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# ── Paths ──
+# Paths
 $CtiHome    = if ($env:CTI_HOME) { $env:CTI_HOME } else { Join-Path $env:USERPROFILE '.claude-to-im' }
 $SkillDir   = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $RuntimeDir = Join-Path $CtiHome 'runtime'
@@ -39,7 +39,7 @@ $DaemonMjs  = Join-Path (Join-Path $SkillDir 'dist') 'daemon.mjs'
 
 $ServiceName = 'ClaudeToIMBridge'
 
-# ── Helpers ──
+# Helpers
 
 function Ensure-Dirs {
     @('data','logs','runtime','data/messages') | ForEach-Object {
@@ -97,8 +97,8 @@ function Show-LastExitReason {
 function Show-FailureHelp {
     Write-Host ""
     Write-Host "Recent logs:"
-    if (Test-Path $LogFile) { Get-Content $LogFile -Tail 20 } else { Write-Host '  (no stdout log file)' }
-    if (Test-Path $ErrLogFile) { Get-Content $ErrLogFile -Tail 20 } else { Write-Host '  (no stderr log file)' }
+    if (Test-Path $LogFile) { Get-Content $LogFile -Encoding UTF8 -Tail 20 } else { Write-Host '  (no stdout log file)' }
+    if (Test-Path $ErrLogFile) { Get-Content $ErrLogFile -Encoding UTF8 -Tail 20 } else { Write-Host '  (no stderr log file)' }
     Write-Host ""
     Write-Host "Next steps:"
     Write-Host "  1. Run diagnostics:  powershell -File `"$SkillDir\scripts\doctor.ps1`""
@@ -115,7 +115,7 @@ function Get-NodePath {
     return $nodePath
 }
 
-# ── WinSW / NSSM detection ──
+# WinSW / NSSM detection
 
 function Find-ServiceManager {
     # Prefer WinSW, then NSSM
@@ -206,33 +206,44 @@ function Install-NSSMService {
     Write-Host "Or:          sc.exe start $ServiceName"
 }
 
-# ── Fallback: Start-Process (no service manager) ──
+# Fallback: Start-Process (no service manager)
 
 function Start-Fallback {
     $nodePath = Get-NodePath
 
-    # Clean env
-    $envClone = [System.Collections.Hashtable]::new()
-    foreach ($key in [System.Environment]::GetEnvironmentVariables().Keys) {
-        $envClone[$key] = [System.Environment]::GetEnvironmentVariable($key)
+    # Normalize duplicate PATH/Path entries for Start-Process on Windows.
+    $upperPath = [System.Environment]::GetEnvironmentVariable('PATH')
+    $titlePath = [System.Environment]::GetEnvironmentVariable('Path')
+    $removedUpperPath = $false
+    if ($upperPath -and $titlePath) {
+        [System.Environment]::SetEnvironmentVariable('PATH', $null)
+        $removedUpperPath = $true
     }
+
     # Remove CLAUDECODE
     [System.Environment]::SetEnvironmentVariable('CLAUDECODE', $null)
 
-    $proc = Start-Process -FilePath $nodePath `
-        -ArgumentList $DaemonMjs `
-        -WorkingDirectory $SkillDir `
-        -WindowStyle Hidden `
-        -RedirectStandardOutput $LogFile `
-        -RedirectStandardError $ErrLogFile `
-        -PassThru
+    try {
+        $proc = Start-Process -FilePath $nodePath `
+            -ArgumentList $DaemonMjs `
+            -WorkingDirectory $SkillDir `
+            -WindowStyle Hidden `
+            -RedirectStandardOutput $LogFile `
+            -RedirectStandardError $ErrLogFile `
+            -PassThru
+    }
+    finally {
+        if ($removedUpperPath) {
+            [System.Environment]::SetEnvironmentVariable('PATH', $upperPath)
+        }
+    }
 
     # Write initial PID (main.ts will overwrite with real PID)
     Set-Content -Path $PidFile -Value $proc.Id
     return $proc.Id
 }
 
-# ── Commands ──
+# Commands
 
 switch ($Command) {
     'start' {
@@ -345,7 +356,7 @@ switch ($Command) {
 
     'logs' {
         if (Test-Path $LogFile) {
-            Get-Content $LogFile -Tail $LogLines | ForEach-Object {
+            Get-Content $LogFile -Encoding UTF8 -Tail $LogLines | ForEach-Object {
                 ($_ -replace '(?i)(token|secret|password)\s*[:=]\s*\S+', '$1=*****')
             }
         } else {
@@ -414,7 +425,3 @@ switch ($Command) {
         Write-Host "  uninstall-service Remove the Windows Service"
     }
 }
-
-
-
-

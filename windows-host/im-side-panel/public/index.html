@@ -1,0 +1,87 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Codex IM Side Panel</title>
+  <link rel="stylesheet" href="./panel.css">
+</head>
+<body>
+  <div class="panel-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Codex Thread Context</p>
+        <h1>IM Side Panel</h1>
+        <p class="subline">在当前线程旁查看桥接会话、最近消息和运行状态。</p>
+      </div>
+      <div class="topbar-actions">
+        <div id="status-pill" class="status-pill">加载中</div>
+        <button id="refresh-button" class="ghost-button">刷新</button>
+      </div>
+    </header>
+
+    <section class="filters-card">
+      <label>
+        <span>关键词</span>
+        <input id="search-input" type="text" placeholder="chatId / sessionId / 内容">
+      </label>
+      <label>
+        <span>渠道</span>
+        <select id="channel-filter">
+          <option value="all">全部</option>
+          <option value="qq">QQ</option>
+          <option value="telegram">Telegram</option>
+          <option value="feishu">飞书</option>
+          <option value="discord">Discord</option>
+        </select>
+      </label>
+      <label>
+        <span>状态</span>
+        <select id="active-filter">
+          <option value="all">全部</option>
+          <option value="active">活跃</option>
+          <option value="inactive">停用</option>
+        </select>
+      </label>
+      <label>
+        <span>角色</span>
+        <select id="role-filter">
+          <option value="all">全部</option>
+          <option value="user">用户</option>
+          <option value="assistant">助手</option>
+          <option value="system">系统</option>
+        </select>
+      </label>
+      <label class="toggle-label">
+        <input id="auto-refresh" type="checkbox" checked>
+        <span>自动刷新</span>
+      </label>
+    </section>
+
+    <main class="workspace">
+      <aside class="thread-column">
+        <div class="column-head">
+          <h2>关联会话</h2>
+          <p id="thread-count">0 个线程</p>
+        </div>
+        <div id="thread-list" class="thread-list"></div>
+      </aside>
+
+      <section class="detail-column">
+        <div class="detail-head">
+          <div>
+            <h2 id="detail-title">选择一个线程</h2>
+            <p id="detail-subtitle">这里会展示该线程关联的 IM 消息与状态。</p>
+          </div>
+          <div id="detail-meta" class="detail-meta"></div>
+        </div>
+        <div id="message-list" class="message-list">
+          <div class="empty-state">请先从左侧选择一个线程。</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./panel.js"></script>
+</body>
+</html>
